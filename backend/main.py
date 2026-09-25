@@ -4,6 +4,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from pathlib import Path
 from google import genai
+from groq import Groq
 from dotenv import load_dotenv
 import os
 
@@ -19,8 +20,16 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-client = genai.Client(
+# =========================
+# AI CLIENTS
+# =========================
+
+gemini_client = genai.Client(
     api_key=os.getenv("GEMINI_API_KEY")
+)
+
+groq_client = Groq(
+    api_key=os.getenv("GROQ_API_KEY")
 )
 
 
@@ -37,6 +46,7 @@ def home():
 
 @app.post("/chat")
 def chat(request: ChatRequest):
+
     prompt = f"""
 You are Dentora by Ehsan — a dedicated BDS-level dental education tutor.
 
@@ -202,9 +212,13 @@ Avoid:
 
 Now answer the student's question according to the current mode.
 """
-    
+
+
+    # =========================
+    # PRIMARY: GEMINI
+    # =========================
     try:
-        response = client.models.generate_content(
+        response = gemini_client.models.generate_content(
             model="gemini-3.5-flash",
             contents=prompt
         )
@@ -213,7 +227,43 @@ Now answer the student's question according to the current mode.
             "reply": response.text
         }
 
-    except Exception as e:
-        return {
-            "reply": f"Gemini error: {str(e)}"
-        }
+    except Exception as gemini_error:
+
+        error_text = str(gemini_error)
+
+        # Use Groq if Gemini is unavailable or rate-limited
+        if (
+            "429" not in error_text
+            and "503" not in error_text
+            and "RESOURCE_EXHAUSTED" not in error_text
+            and "UNAVAILABLE" not in error_text
+        ):
+            return {
+                "reply": f"Gemini error: {error_text}"
+            }
+
+        try:
+            groq_response = groq_client.chat.completions.create(
+                model="openai/gpt-oss-120b",
+                messages=[
+                    {
+                        "role": "user",
+                        "content": prompt
+                    }
+                ],
+                include_reasoning=False
+            )
+
+            return {
+                "reply": groq_response.choices[0].message.content
+            }
+
+        except Exception as groq_error:
+
+            return {
+                "reply": (
+                    "Both AI providers are currently unavailable.\n\n"
+                    f"Gemini: {error_text}\n\n"
+                    f"Groq: {str(groq_error)}"
+                )
+            }
