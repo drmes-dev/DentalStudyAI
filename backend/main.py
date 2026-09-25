@@ -5,6 +5,7 @@ from pydantic import BaseModel
 from pathlib import Path
 from google import genai
 from groq import Groq
+from openai import OpenAI
 from dotenv import load_dotenv
 import os
 
@@ -31,7 +32,10 @@ gemini_client = genai.Client(
 groq_client = Groq(
     api_key=os.getenv("GROQ_API_KEY")
 )
-
+qwen_client = OpenAI(
+    api_key=os.getenv("DASHSCOPE_API_KEY"),
+    base_url="https://dashscope-intl.aliyuncs.com/compatible-mode/v1"
+)
 
 class ChatRequest(BaseModel):
     message: str
@@ -231,7 +235,6 @@ Now answer the student's question according to the current mode.
 
         error_text = str(gemini_error)
 
-        # Use Groq if Gemini is unavailable or rate-limited
         if (
             "429" not in error_text
             and "503" not in error_text
@@ -260,10 +263,28 @@ Now answer the student's question according to the current mode.
 
         except Exception as groq_error:
 
-            return {
-                "reply": (
-                    "Both AI providers are currently unavailable.\n\n"
-                    f"Gemini: {error_text}\n\n"
-                    f"Groq: {str(groq_error)}"
+            try:
+                qwen_response = qwen_client.chat.completions.create(
+                    model="qwen-plus",
+                    messages=[
+                        {
+                            "role": "user",
+                            "content": prompt
+                        }
+                    ]
                 )
-            }
+
+                return {
+                    "reply": qwen_response.choices[0].message.content
+                }
+
+            except Exception as qwen_error:
+
+                return {
+                    "reply": (
+                        "All AI providers are currently unavailable.\n\n"
+                        f"Gemini: {error_text}\n\n"
+                        f"Groq: {str(groq_error)}\n\n"
+                        f"Qwen: {str(qwen_error)}"
+                    )
+                }
