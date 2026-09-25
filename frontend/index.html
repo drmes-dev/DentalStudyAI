@@ -447,16 +447,11 @@ async function sendMessage() {
 
     document.getElementById("chat").appendChild(loading);
 
+    
     try {
 
         const response = await fetch(
-            "const response = await fetch(
-    "/chat",
-    {
-        method: "POST",
-
-        headers: {
-            "Content-Type": "application/json"",
+            "https://dentalstudyai.onrender.com/chat",
             {
                 method: "POST",
 
@@ -476,7 +471,6 @@ async function sendMessage() {
         loading.remove();
 
         addMessage(data.reply, "assistant");
-
     } catch (error) {
 
         loading.remove();
