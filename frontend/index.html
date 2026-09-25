@@ -1,0 +1,510 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DentalStudy AI</title>
+
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            font-family: Arial, Helvetica, sans-serif;
+            background: #f4f7fb;
+            color: #1f2937;
+        }
+
+        .app {
+            max-width: 1100px;
+            margin: 0 auto;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        header {
+            background: #ffffff;
+            border-bottom: 1px solid #e5e7eb;
+            padding: 20px 24px;
+        }
+
+        header h1 {
+            margin: 0;
+            font-size: 28px;
+        }
+
+        header p {
+            margin: 6px 0 0;
+            color: #6b7280;
+        }
+
+        .toolbar {
+            background: #ffffff;
+            padding: 14px 24px;
+            border-bottom: 1px solid #e5e7eb;
+        }
+
+        select {
+            width: 220px;
+            padding: 10px 12px;
+            border: 1px solid #d1d5db;
+            border-radius: 8px;
+            font-size: 15px;
+            background: white;
+        }
+
+        #chat {
+            flex: 1;
+            padding: 24px;
+            overflow-y: auto;
+        }
+
+        .message {
+            max-width: 850px;
+            margin-bottom: 20px;
+            padding: 16px 20px;
+            border-radius: 12px;
+            line-height: 1.65;
+        }
+
+        .user {
+            margin-left: auto;
+            background: #dbeafe;
+        }
+
+        .assistant {
+            margin-right: auto;
+            background: #ffffff;
+            border: 1px solid #e5e7eb;
+        }
+
+        .message h1,
+        .message h2,
+        .message h3,
+        .message h4 {
+            margin-top: 18px;
+            margin-bottom: 8px;
+            color: #111827;
+        }
+
+        .message h1:first-child,
+        .message h2:first-child,
+        .message h3:first-child {
+            margin-top: 0;
+        }
+
+        .message p {
+            margin: 8px 0;
+        }
+
+        .message ul,
+        .message ol {
+            padding-left: 28px;
+            margin: 8px 0;
+        }
+
+        .message li {
+            margin: 5px 0;
+        }
+
+        .message strong {
+            font-weight: 700;
+        }
+
+        .message blockquote {
+            border-left: 4px solid #9ca3af;
+            margin: 12px 0;
+            padding-left: 14px;
+            color: #4b5563;
+        }
+
+        .message code {
+            background: #f3f4f6;
+            padding: 2px 5px;
+            border-radius: 4px;
+        }
+
+        .message pre {
+            background: #111827;
+            color: #f9fafb;
+            padding: 14px;
+            border-radius: 8px;
+            overflow-x: auto;
+        }
+
+        .message table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 14px 0;
+            font-size: 14px;
+        }
+
+        .message th,
+        .message td {
+            border: 1px solid #d1d5db;
+            padding: 9px 10px;
+            text-align: left;
+            vertical-align: top;
+        }
+
+        .message th {
+            background: #f3f4f6;
+            font-weight: 700;
+        }
+
+        .input-area {
+            background: #ffffff;
+            border-top: 1px solid #e5e7eb;
+            padding: 16px 24px;
+            display: flex;
+            gap: 10px;
+        }
+
+        #messageInput {
+            flex: 1;
+            padding: 13px;
+            border: 1px solid #d1d5db;
+            border-radius: 8px;
+            font-size: 16px;
+            resize: none;
+        }
+
+        button {
+            padding: 0 22px;
+            border: none;
+            border-radius: 8px;
+            background: #2563eb;
+            color: white;
+            font-size: 16px;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background: #1d4ed8;
+        }
+
+        .loading {
+            color: #6b7280;
+            font-style: italic;
+        }
+
+        @media (max-width: 700px) {
+            .message {
+                max-width: 95%;
+            }
+
+            select {
+                width: 100%;
+            }
+
+            .input-area {
+                padding: 12px;
+            }
+
+            #chat {
+                padding: 12px;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+<div class="app">
+
+    <header>
+        <h1>🦷 DentalStudy AI</h1>
+        <p>Your personal BDS study assistant</p>
+    </header>
+
+    <div class="toolbar">
+        <select id="mode">
+            <option value="Study Chat">Study Chat</option>
+            <option value="MCQ Mode">MCQ Mode</option>
+            <option value="Viva Mode">Viva Mode</option>
+            <option value="OSCE Mode">OSCE Mode</option>
+            <option value="PDF Tutor">PDF Tutor</option>
+        </select>
+    </div>
+
+    <div id="chat"></div>
+
+    <div class="input-area">
+        <textarea
+            id="messageInput"
+            rows="2"
+            placeholder="Ask your BDS question..."
+        ></textarea>
+
+        <button onclick="sendMessage()">Send</button>
+    </div>
+
+</div>
+
+<script>
+
+function escapeHtml(text) {
+    return text
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;");
+}
+function formatMarkdown(text) {
+
+    text = escapeHtml(text);
+
+    // Convert common LaTeX notation to normal readable text
+    text = text.replace(/\$\\?circ\$/g, "°");
+    text = text.replace(/\\circ/g, "°");
+    text = text.replace(/\\%/g, "%");
+    text = text.replace(/\\pm/g, "±");
+    text = text.replace(/\\times/g, "×");
+    text = text.replace(/\\rightarrow/g, "→");
+    text = text.replace(/\\leftarrow/g, "←");
+    text = text.replace(/\\geq/g, "≥");
+    text = text.replace(/\\leq/g, "≤");
+
+    // Remove simple LaTeX dollar signs
+    text = text.replace(/\$/g, "");
+
+    // Convert simple superscripts
+    text = text.replace(/\^\{([^}]+)\}/g, "<sup>$1</sup>");
+    text = text.replace(/\^(\d+)/g, "<sup>$1</sup>");
+
+    // Code blocks
+    text = text.replace(
+        /```([\s\S]*?)```/g,
+        "<pre>$1</pre>"
+    );
+
+    // Tables
+    const lines = text.split("\n");
+    let output = [];
+    let i = 0;
+
+    while (i < lines.length) {
+
+        if (
+            lines[i].includes("|") &&
+            i + 1 < lines.length &&
+            /^\s*\|?[\s:-]+\|/.test(lines[i + 1])
+        ) {
+
+            let table = "<table>";
+
+            const headers = lines[i]
+                .split("|")
+                .map(x => x.trim())
+                .filter(Boolean);
+
+            table += "<thead><tr>";
+
+            headers.forEach(header => {
+                table += `<th>${header}</th>`;
+            });
+
+            table += "</tr></thead><tbody>";
+
+            i += 2;
+
+            while (i < lines.length && lines[i].includes("|")) {
+
+                const cells = lines[i]
+                    .split("|")
+                    .map(x => x.trim())
+                    .filter(Boolean);
+
+                table += "<tr>";
+
+                cells.forEach(cell => {
+                    table += `<td>${cell}</td>`;
+                });
+
+                table += "</tr>";
+
+                i++;
+            }
+
+            table += "</tbody></table>";
+
+            output.push(table);
+
+            continue;
+        }
+
+        output.push(lines[i]);
+
+        i++;
+    }
+
+    text = output.join("\n");
+
+    // Headings
+    text = text.replace(
+        /^#### (.*)$/gm,
+        "<h4>$1</h4>"
+    );
+
+    text = text.replace(
+        /^### (.*)$/gm,
+        "<h3>$1</h3>"
+    );
+
+    text = text.replace(
+        /^## (.*)$/gm,
+        "<h2>$1</h2>"
+    );
+
+    text = text.replace(
+        /^# (.*)$/gm,
+        "<h1>$1</h1>"
+    );
+
+    // Bold
+    text = text.replace(
+        /\*\*(.*?)\*\*/g,
+        "<strong>$1</strong>"
+    );
+
+    // Italic
+    text = text.replace(
+        /\*(.*?)\*/g,
+        "<em>$1</em>"
+    );
+
+    // Numbered lists
+    text = text.replace(
+        /(?:^|\n)(\d+)\.\s+(.*)/g,
+        "<br><strong>$1.</strong> $2"
+    );
+
+    // Bullet lists
+    text = text.replace(
+        /(?:^|\n)[*-]\s+(.*)/g,
+        "<br>• $1"
+    );
+
+    // Paragraph breaks
+    text = text.replace(
+        /\n{2,}/g,
+        "<br><br>"
+    );
+
+    // Remaining line breaks
+    text = text.replace(
+        /\n/g,
+        "<br>"
+    );
+
+    return text;
+}
+
+
+
+function addMessage(text, type) {
+
+    const message = document.createElement("div");
+
+    message.className = `message ${type}`;
+
+    if (type === "assistant") {
+        message.innerHTML = formatMarkdown(text);
+    } else {
+        message.textContent = text;
+    }
+
+    document.getElementById("chat").appendChild(message);
+
+    message.scrollIntoView({
+        behavior: "smooth"
+    });
+}
+
+
+async function sendMessage() {
+
+    const input = document.getElementById("messageInput");
+    const message = input.value.trim();
+
+    if (!message) {
+        return;
+    }
+
+    const mode = document.getElementById("mode").value;
+
+    addMessage(message, "user");
+
+    input.value = "";
+
+    const loading = document.createElement("div");
+
+    loading.className = "message assistant loading";
+
+    loading.textContent = "DentalStudy AI is thinking...";
+
+    document.getElementById("chat").appendChild(loading);
+
+    try {
+
+        const response = await fetch(
+            "const response = await fetch(
+    "/chat",
+    {
+        method: "POST",
+
+        headers: {
+            "Content-Type": "application/json"",
+            {
+                method: "POST",
+
+                headers: {
+                    "Content-Type": "application/json"
+                },
+
+                body: JSON.stringify({
+                    message: message,
+                    mode: mode
+                })
+            }
+        );
+
+        const data = await response.json();
+
+        loading.remove();
+
+        addMessage(data.reply, "assistant");
+
+    } catch (error) {
+
+        loading.remove();
+
+        addMessage(
+            "Unable to connect to the DentalStudy AI backend. Please make sure the server is running.",
+            "assistant"
+        );
+
+        console.error(error);
+    }
+}
+
+
+document
+    .getElementById("messageInput")
+    .addEventListener("keydown", function(event) {
+
+        if (event.key === "Enter" && !event.shiftKey) {
+
+            event.preventDefault();
+
+            sendMessage();
+        }
+
+    });
+
+</script>
+
+</body>
+</html>
