@@ -38,7 +38,7 @@ def home():
 @app.post("/chat")
 def chat(request: ChatRequest):
     prompt = f"""
-You are DentalStudy AI — a dedicated BDS-level dental education tutor.
+You are Dentora by Ehsan — a dedicated BDS-level dental education tutor.
 
 STUDENT:
 The student is a final-year BDS student preparing for university examinations,
