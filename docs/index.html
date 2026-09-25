@@ -1,0 +1,2149 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+
+<meta charset="UTF-8">
+
+<meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0"
+>
+
+<title>Dentora by Ehsan</title>
+
+<style>
+
+* {
+    box-sizing: border-box;
+}
+
+html,
+body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    font-family:
+        Inter,
+        -apple-system,
+        BlinkMacSystemFont,
+        "Segoe UI",
+        sans-serif;
+    background: #f7f8fa;
+    color: #202124;
+}
+
+body {
+    overflow: hidden;
+}
+
+
+/* =========================
+   APP
+========================= */
+
+.app {
+    display: flex;
+    width: 100%;
+    height: 100vh;
+}
+
+
+/* =========================
+   SIDEBAR
+========================= */
+
+.sidebar {
+    width: 270px;
+    background: #ffffff;
+    border-right: 1px solid #e6e8eb;
+    display: flex;
+    flex-direction: column;
+    padding: 22px 16px;
+    flex-shrink: 0;
+}
+
+.brand {
+    display: flex;
+    align-items: center;
+    gap: 11px;
+    padding: 4px 8px 24px;
+}
+
+.brand-logo {
+    width: 40px;
+    height: 40px;
+    border-radius: 12px;
+    background: #111827;
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+    font-weight: 700;
+}
+
+.brand-text {
+    font-size: 21px;
+    font-weight: 750;
+    letter-spacing: -0.5px;
+}
+
+.brand-sub {
+    font-size: 11px;
+    color: #8b9098;
+    margin-top: 2px;
+}
+
+.new-chat {
+    width: 100%;
+    border: none;
+    border-radius: 11px;
+    background: #111827;
+    color: white;
+    padding: 12px 14px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    margin-bottom: 14px;
+}
+
+.new-chat:hover {
+    background: #1f2937;
+}
+
+.search-box {
+    width: 100%;
+    border: 1px solid #e5e7eb;
+    border-radius: 10px;
+    padding: 10px 12px;
+    outline: none;
+    font-size: 13px;
+    margin-bottom: 18px;
+}
+
+.search-box:focus {
+    border-color: #aeb4bd;
+}
+
+.section-title {
+    padding: 0 8px;
+    margin: 10px 0 8px;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #969ba3;
+    font-weight: 700;
+}
+
+.nav-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 11px;
+    border-radius: 9px;
+    cursor: pointer;
+    color: #555b65;
+    font-size: 14px;
+    margin-bottom: 3px;
+}
+
+.nav-item:hover {
+    background: #f4f5f7;
+}
+
+.nav-item.active {
+    background: #f0f1f3;
+    color: #111827;
+    font-weight: 600;
+}
+
+.recent-list {
+    overflow-y: auto;
+    flex: 1;
+    margin-top: 3px;
+}
+
+.recent-item {
+    padding: 9px 10px;
+    border-radius: 8px;
+    color: #646a73;
+    font-size: 13px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    cursor: pointer;
+}
+
+.recent-item:hover {
+    background: #f5f6f7;
+}
+
+.sidebar-footer {
+    border-top: 1px solid #eeeeef;
+    padding-top: 15px;
+    margin-top: 12px;
+    font-size: 11px;
+    color: #9aa0a8;
+    text-align: center;
+}
+
+
+/* =========================
+   MAIN
+========================= */
+
+.main {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+}
+
+.topbar {
+    height: 66px;
+    background: white;
+    border-bottom: 1px solid #e7e8ea;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 25px;
+    flex-shrink: 0;
+}
+
+.topbar-title {
+    font-size: 16px;
+    font-weight: 650;
+}
+
+.mode-select {
+    border: 1px solid #e2e4e7;
+    background: white;
+    border-radius: 9px;
+    padding: 9px 12px;
+    font-size: 13px;
+    outline: none;
+    cursor: pointer;
+}
+
+
+/* =========================
+   CHAT AREA
+========================= */
+
+.chat-area {
+    flex: 1;
+    overflow-y: auto;
+    padding: 35px 20px 170px;
+}
+
+.chat-inner {
+    width: min(900px, 100%);
+    margin: 0 auto;
+}
+
+.welcome {
+    text-align: center;
+    padding: 80px 20px 40px;
+}
+
+.welcome-icon {
+    width: 62px;
+    height: 62px;
+    margin: 0 auto 18px;
+    border-radius: 18px;
+    background: #111827;
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 29px;
+}
+
+.welcome h1 {
+    margin: 0;
+    font-size: 29px;
+    letter-spacing: -0.8px;
+}
+
+.welcome p {
+    max-width: 570px;
+    margin: 11px auto 0;
+    color: #737982;
+    font-size: 14px;
+    line-height: 1.65;
+}
+
+
+/* =========================
+   MESSAGES
+========================= */
+
+.message-row {
+    display: flex;
+    margin-bottom: 25px;
+}
+
+.message-row.user {
+    justify-content: flex-end;
+}
+
+.message {
+    max-width: 78%;
+    line-height: 1.65;
+    font-size: 14px;
+}
+
+.message.user-message {
+    background: #111827;
+    color: white;
+    padding: 12px 15px;
+    border-radius: 15px 15px 4px 15px;
+}
+
+.message.ai-message {
+    background: white;
+    border: 1px solid #e8e9eb;
+    padding: 15px 17px;
+    border-radius: 15px 15px 15px 4px;
+    color: #30343a;
+}
+
+.message-label {
+    font-size: 11px;
+    color: #9297a0;
+    margin-bottom: 6px;
+    font-weight: 650;
+}
+
+.ai-message p {
+    margin: 0 0 10px;
+}
+
+.ai-message p:last-child {
+    margin-bottom: 0;
+}
+
+.ai-message ul,
+.ai-message ol {
+    margin-top: 7px;
+    margin-bottom: 10px;
+    padding-left: 22px;
+}
+
+.ai-message strong {
+    font-weight: 700;
+}
+
+.typing {
+    display: inline-flex;
+    gap: 5px;
+    align-items: center;
+    padding: 4px 2px;
+}
+
+.typing span {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #999;
+    animation: typing 1.2s infinite;
+}
+
+.typing span:nth-child(2) {
+    animation-delay: .15s;
+}
+
+.typing span:nth-child(3) {
+    animation-delay: .3s;
+}
+
+@keyframes typing {
+
+    0%,
+    60%,
+    100% {
+        opacity: .3;
+        transform: translateY(0);
+    }
+
+    30% {
+        opacity: 1;
+        transform: translateY(-3px);
+    }
+}
+
+
+/* =========================
+   COMPOSER
+========================= */
+
+.composer-wrap {
+    position: fixed;
+    left: 270px;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(
+        to top,
+        #f7f8fa 78%,
+        rgba(247,248,250,0)
+    );
+    padding: 20px 20px 23px;
+}
+
+.composer-inner {
+    width: min(900px, 100%);
+    margin: 0 auto;
+}
+
+
+/* =========================
+   PDF STATUS
+========================= */
+
+.pdf-status {
+    display: none;
+    align-items: center;
+    gap: 12px;
+    background: white;
+    border: 1px solid #dfe3e8;
+    border-radius: 12px;
+    padding: 10px 12px;
+    margin-bottom: 9px;
+    box-shadow: 0 3px 10px rgba(0,0,0,.04);
+}
+
+.pdf-status.show {
+    display: flex;
+}
+
+.pdf-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 9px;
+    background: #f1f3f5;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    flex-shrink: 0;
+}
+
+.pdf-info {
+    min-width: 0;
+    flex: 1;
+}
+
+.pdf-name {
+    font-size: 13px;
+    font-weight: 650;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.pdf-details {
+    font-size: 11px;
+    color: #888e97;
+    margin-top: 2px;
+}
+
+.pdf-ready {
+    font-size: 11px;
+    font-weight: 650;
+    color: #4b5563;
+    white-space: nowrap;
+}
+
+.pdf-remove {
+    border: none;
+    background: transparent;
+    color: #999;
+    font-size: 20px;
+    cursor: pointer;
+    line-height: 1;
+    padding: 3px 5px;
+}
+
+.pdf-remove:hover {
+    color: #222;
+}
+
+
+/* =========================
+   COMPOSER
+========================= */
+
+.composer {
+    display: flex;
+    align-items: flex-end;
+    gap: 8px;
+    background: white;
+    border: 1px solid #dfe2e6;
+    border-radius: 15px;
+    padding: 8px;
+    box-shadow: 0 5px 20px rgba(0,0,0,.05);
+}
+
+.icon-btn {
+    width: 39px;
+    height: 39px;
+    border: none;
+    background: #f3f4f6;
+    border-radius: 10px;
+    cursor: pointer;
+    font-size: 17px;
+    flex-shrink: 0;
+}
+
+.icon-btn:hover {
+    background: #e9eaec;
+}
+
+#messageInput {
+    flex: 1;
+    border: none;
+    outline: none;
+    resize: none;
+    min-height: 39px;
+    max-height: 150px;
+    padding: 10px 6px;
+    font-size: 14px;
+    font-family: inherit;
+    line-height: 1.4;
+}
+
+.send-btn {
+    width: 39px;
+    height: 39px;
+    border: none;
+    border-radius: 10px;
+    background: #111827;
+    color: white;
+    font-size: 17px;
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+.send-btn:hover {
+    background: #252b36;
+}
+
+.send-btn:disabled {
+    opacity: .45;
+    cursor: not-allowed;
+}
+
+.helper {
+    text-align: center;
+    font-size: 10px;
+    color: #a1a5ab;
+    margin-top: 8px;
+}
+
+
+/* =========================
+   MOBILE
+========================= */
+
+.mobile-menu {
+    display: none;
+    border: none;
+    background: transparent;
+    font-size: 22px;
+    cursor: pointer;
+}
+
+@media (max-width: 800px) {
+
+    .sidebar {
+        position: fixed;
+        left: -290px;
+        top: 0;
+        bottom: 0;
+        z-index: 20;
+        transition: left .2s ease;
+        box-shadow: 5px 0 20px rgba(0,0,0,.08);
+    }
+
+    .sidebar.open {
+        left: 0;
+    }
+
+    .mobile-menu {
+        display: block;
+    }
+
+    .topbar {
+        padding: 0 15px;
+        gap: 10px;
+    }
+
+    .topbar-title {
+        display: none;
+    }
+
+    .composer-wrap {
+        left: 0;
+        padding: 12px 10px 17px;
+    }
+
+    .chat-area {
+        padding-left: 12px;
+        padding-right: 12px;
+    }
+
+    .message {
+        max-width: 88%;
+    }
+
+    .pdf-ready {
+        display: none;
+    }
+}
+
+</style>
+
+</head>
+
+
+<body>
+
+
+<div class="app">
+
+
+    <!-- =========================
+         SIDEBAR
+    ========================== -->
+
+    <aside
+        class="sidebar"
+        id="sidebar"
+    >
+
+        <div class="brand">
+
+            <div class="brand-logo">
+                D
+            </div>
+
+            <div>
+
+                <div class="brand-text">
+                    Dentora
+                </div>
+
+                <div class="brand-sub">
+                    by Ehsan
+                </div>
+
+            </div>
+
+        </div>
+
+
+        <button
+            class="new-chat"
+            onclick="newChat()"
+        >
+            + New Chat
+        </button>
+
+
+        <input
+            class="search-box"
+            id="searchChats"
+            type="text"
+            placeholder="Search chats..."
+            oninput="searchChats()"
+        >
+
+
+        <div class="section-title">
+            Workspace
+        </div>
+
+
+        <div
+            class="nav-item active"
+            onclick="setWorkspace('Chat')"
+        >
+            💬
+            <span>Chat</span>
+        </div>
+
+
+        <div
+            class="nav-item"
+            onclick="openPDFPicker()"
+        >
+            📄
+            <span>My PDFs</span>
+        </div>
+
+
+        <div class="nav-item">
+            📝
+            <span>MCQ Mode</span>
+        </div>
+
+
+        <div class="nav-item">
+            🎤
+            <span>Viva Mode</span>
+        </div>
+
+
+        <div class="nav-item">
+            🩺
+            <span>OSCE Mode</span>
+        </div>
+
+
+        <div class="section-title">
+            Recent Chats
+        </div>
+
+
+        <div
+            class="recent-list"
+            id="recentList"
+        ></div>
+
+
+        <div class="sidebar-footer">
+            Dentora Study Workspace
+        </div>
+
+    </aside>
+
+
+
+    <!-- =========================
+         MAIN
+    ========================== -->
+
+    <main class="main">
+
+
+        <header class="topbar">
+
+            <button
+                class="mobile-menu"
+                onclick="toggleSidebar()"
+            >
+                ☰
+            </button>
+
+
+            <div class="topbar-title">
+                Dentora Study Workspace
+            </div>
+
+
+            <select
+                class="mode-select"
+                id="modeSelect"
+            >
+
+                <option>
+                    Study Chat
+                </option>
+
+                <option>
+                    MCQ Mode
+                </option>
+
+                <option>
+                    Viva Mode
+                </option>
+
+                <option>
+                    OSCE Mode
+                </option>
+
+                <option>
+                    PDF Tutor
+                </option>
+
+            </select>
+
+        </header>
+
+
+
+        <!-- =========================
+             CHAT
+        ========================== -->
+
+        <section
+            class="chat-area"
+            id="chatArea"
+        >
+
+            <div
+                class="chat-inner"
+                id="chatInner"
+            >
+
+                <div
+                    class="welcome"
+                    id="welcome"
+                >
+
+                    <div class="welcome-icon">
+                        D
+                    </div>
+
+                    <h1>
+                        How can I help you study?
+                    </h1>
+
+                    <p>
+                        Ask Dentora about dentistry,
+                        medicine, viva preparation,
+                        OSCEs, MCQs, or upload a PDF
+                        and study directly from it.
+                    </p>
+
+                </div>
+
+            </div>
+
+        </section>
+
+
+
+        <!-- =========================
+             COMPOSER
+        ========================== -->
+
+        <div class="composer-wrap">
+
+            <div class="composer-inner">
+
+
+                <!-- PDF STATUS -->
+
+                <div
+                    class="pdf-status"
+                    id="pdfStatus"
+                >
+
+                    <div class="pdf-icon">
+                        📄
+                    </div>
+
+
+                    <div class="pdf-info">
+
+                        <div
+                            class="pdf-name"
+                            id="pdfName"
+                        >
+                            No PDF
+                        </div>
+
+                        <div
+                            class="pdf-details"
+                            id="pdfDetails"
+                        >
+                            No document uploaded
+                        </div>
+
+                    </div>
+
+
+                    <div class="pdf-ready">
+                        ✓ PDF Ready
+                    </div>
+
+
+                    <button
+                        class="pdf-remove"
+                        onclick="hidePDFStatus()"
+                        title="Remove PDF"
+                    >
+                        ×
+                    </button>
+
+                </div>
+
+
+                <!-- COMPOSER -->
+
+                <div class="composer">
+
+                    <button
+                        class="icon-btn"
+                        title="Upload PDF"
+                        onclick="openPDFPicker()"
+                    >
+                        📎
+                    </button>
+
+
+                    <textarea
+                        id="messageInput"
+                        rows="1"
+                        placeholder="Ask Dentora anything..."
+                        onkeydown="handleKey(event)"
+                        oninput="autoResize(this)"
+                    ></textarea>
+
+
+                    <button
+                        class="send-btn"
+                        id="sendButton"
+                        onclick="sendMessage()"
+                    >
+                        ➤
+                    </button>
+
+                </div>
+
+
+                <div class="helper">
+                    Enter to send • Shift + Enter for new line
+                </div>
+
+
+            </div>
+
+        </div>
+
+    </main>
+
+</div>
+
+
+
+<!-- Hidden PDF input -->
+
+<input
+    type="file"
+    id="pdfInput"
+    accept="application/pdf"
+    style="display:none"
+    onchange="handlePDF(this)"
+>
+
+
+<script>
+
+
+/* =========================
+   CONFIG
+========================= */
+
+const API_BASE =
+    "https://dentalstudyai.onrender.com";
+
+
+const CHAT_API =
+    API_BASE + "/chat";
+
+
+const PDF_API =
+    API_BASE + "/upload-pdf";
+
+
+/* =========================
+   STATE
+========================= */
+
+let currentPDF = null;
+
+let chatMessages = [];
+
+let isSending = false;
+
+
+/* =========================
+   ELEMENTS
+========================= */
+
+const messageInput =
+    document.getElementById(
+        "messageInput"
+    );
+
+
+const sendButton =
+    document.getElementById(
+        "sendButton"
+    );
+
+
+const chatInner =
+    document.getElementById(
+        "chatInner"
+    );
+
+
+const chatArea =
+    document.getElementById(
+        "chatArea"
+    );
+
+
+/* =========================
+   NEW CHAT
+========================= */
+
+function newChat() {
+
+    chatMessages = [];
+
+    localStorage.removeItem(
+        "dentora_current_chat"
+    );
+
+    chatInner.innerHTML = `
+
+        <div class="welcome" id="welcome">
+
+            <div class="welcome-icon">
+                D
+            </div>
+
+            <h1>
+                How can I help you study?
+            </h1>
+
+            <p>
+                Ask Dentora about dentistry,
+                medicine, viva preparation,
+                OSCEs, MCQs, or upload a PDF
+                and study directly from it.
+            </p>
+
+        </div>
+
+    `;
+
+    messageInput.value = "";
+
+    autoResize(
+        messageInput
+    );
+
+    renderRecentChats();
+
+}
+
+
+/* =========================
+   SEND MESSAGE
+========================= */
+
+async function sendMessage() {
+
+    if (isSending) {
+        return;
+    }
+
+
+    const message =
+        messageInput.value.trim();
+
+
+    if (!message) {
+        return;
+    }
+
+
+    const mode =
+        document.getElementById(
+            "modeSelect"
+        ).value;
+
+
+    isSending = true;
+
+    sendButton.disabled = true;
+
+
+    /* Remove welcome screen */
+
+    const welcome =
+        document.getElementById(
+            "welcome"
+        );
+
+    if (welcome) {
+        welcome.remove();
+    }
+
+
+    /* Show user message */
+
+    addMessage(
+        message,
+        "user"
+    );
+
+
+    /* Clear input */
+
+    messageInput.value = "";
+
+    autoResize(
+        messageInput
+    );
+
+
+    /* Add typing indicator */
+
+    const typingId =
+        "typing-" +
+        Date.now();
+
+
+    addTypingIndicator(
+        typingId
+    );
+
+
+    try {
+
+        console.log(
+            "Sending chat request:",
+            {
+                message,
+                mode
+            }
+        );
+
+
+        const response =
+            await fetch(
+                CHAT_API,
+                {
+                    method: "POST",
+
+                    headers: {
+                        "Content-Type":
+                            "application/json"
+                    },
+
+                    body: JSON.stringify({
+                        message:
+                            message,
+
+                        mode:
+                            mode
+                    })
+                }
+            );
+
+
+        console.log(
+            "Chat HTTP status:",
+            response.status
+        );
+
+
+        if (!response.ok) {
+
+            throw new Error(
+                "Server returned HTTP " +
+                response.status
+            );
+
+        }
+
+
+        const data =
+            await response.json();
+
+
+        console.log(
+            "Chat response:",
+            data
+        );
+
+
+        removeTypingIndicator(
+            typingId
+        );
+
+
+        /*
+         * Backend returns:
+         *
+         * {
+         *   response: "...",
+         *   provider: "..."
+         * }
+         */
+
+
+        if (
+            !data ||
+            typeof data.response !== "string" ||
+            !data.response.trim()
+        ) {
+
+            throw new Error(
+                "Backend returned no response text."
+            );
+
+        }
+
+
+        addMessage(
+            data.response,
+            "ai",
+            data.provider
+        );
+
+
+        /* Save conversation */
+
+        chatMessages.push({
+            user: message,
+            ai: data.response,
+            mode: mode,
+            provider:
+                data.provider || ""
+        });
+
+
+        saveCurrentChat();
+
+        renderRecentChats();
+
+
+    } catch (error) {
+
+        console.error(
+            "Chat error:",
+            error
+        );
+
+
+        removeTypingIndicator(
+            typingId
+        );
+
+
+        addMessage(
+            "Dentora couldn't connect to the AI service. Please try again.",
+            "ai"
+        );
+
+    } finally {
+
+        isSending = false;
+
+        sendButton.disabled = false;
+
+        messageInput.focus();
+
+    }
+
+}
+
+
+/* =========================
+   ADD MESSAGE
+========================= */
+
+function addMessage(
+    text,
+    type,
+    provider = ""
+) {
+
+    const row =
+        document.createElement(
+            "div"
+        );
+
+
+    row.className =
+        "message-row " +
+        (
+            type === "user"
+                ? "user"
+                : "ai"
+        );
+
+
+    const message =
+        document.createElement(
+            "div"
+        );
+
+
+    message.className =
+        "message " +
+        (
+            type === "user"
+                ? "user-message"
+                : "ai-message"
+        );
+
+
+    if (type === "user") {
+
+        message.textContent =
+            text;
+
+    } else {
+
+        message.innerHTML =
+            formatAIResponse(
+                text
+            );
+
+
+        if (provider) {
+
+            const providerLabel =
+                document.createElement(
+                    "div"
+                );
+
+            providerLabel.style.marginTop =
+                "10px";
+
+            providerLabel.style.fontSize =
+                "10px";
+
+            providerLabel.style.color =
+                "#a0a5ad";
+
+            providerLabel.textContent =
+                "Powered by " +
+                provider;
+
+            message.appendChild(
+                providerLabel
+            );
+
+        }
+
+    }
+
+
+    row.appendChild(
+        message
+    );
+
+
+    chatInner.appendChild(
+        row
+    );
+
+
+    scrollToBottom();
+
+}
+
+
+/* =========================
+   AI FORMATTING
+========================= */
+
+function formatAIResponse(text) {
+
+    let escaped =
+        escapeHTML(text);
+
+
+    /*
+     * Basic Markdown support
+     */
+
+    escaped =
+        escaped.replace(
+            /\*\*(.*?)\*\*/g,
+            "<strong>$1</strong>"
+        );
+
+
+    escaped =
+        escaped.replace(
+            /^### (.*)$/gm,
+            "<strong>$1</strong>"
+        );
+
+
+    escaped =
+        escaped.replace(
+            /^## (.*)$/gm,
+            "<strong>$1</strong>"
+        );
+
+
+    escaped =
+        escaped.replace(
+            /^# (.*)$/gm,
+            "<strong>$1</strong>"
+        );
+
+
+    /*
+     * Bullet lists
+     */
+
+    escaped =
+        escaped.replace(
+            /(?:^|\n)[•*-]\s+(.*)/g,
+            "<br>• $1"
+        );
+
+
+    /*
+     * Numbered lists
+     */
+
+    escaped =
+        escaped.replace(
+            /(?:^|\n)(\d+)\.\s+(.*)/g,
+            "<br>$1. $2"
+        );
+
+
+    /*
+     * Line breaks
+     */
+
+    escaped =
+        escaped.replace(
+            /\n/g,
+            "<br>"
+        );
+
+
+    return escaped;
+
+}
+
+
+/* =========================
+   HTML ESCAPE
+========================= */
+
+function escapeHTML(text) {
+
+    return text
+        .replace(
+            /&/g,
+            "&amp;"
+        )
+        .replace(
+            /</g,
+            "&lt;"
+        )
+        .replace(
+            />/g,
+            "&gt;"
+        )
+        .replace(
+            /"/g,
+            "&quot;"
+        )
+        .replace(
+            /'/g,
+            "&#039;"
+        );
+
+}
+
+
+/* =========================
+   TYPING
+========================= */
+
+function addTypingIndicator(
+    id
+) {
+
+    const row =
+        document.createElement(
+            "div"
+        );
+
+    row.className =
+        "message-row ai";
+
+    row.id = id;
+
+
+    row.innerHTML = `
+
+        <div class="message ai-message">
+
+            <div class="typing">
+
+                <span></span>
+                <span></span>
+                <span></span>
+
+            </div>
+
+        </div>
+
+    `;
+
+
+    chatInner.appendChild(
+        row
+    );
+
+
+    scrollToBottom();
+
+}
+
+
+function removeTypingIndicator(
+    id
+) {
+
+    const element =
+        document.getElementById(
+            id
+        );
+
+    if (element) {
+        element.remove();
+    }
+
+}
+
+
+/* =========================
+   PDF PICKER
+========================= */
+
+function openPDFPicker() {
+
+    document
+        .getElementById(
+            "pdfInput"
+        )
+        .click();
+
+}
+
+
+/* =========================
+   PDF UPLOAD
+========================= */
+
+async function handlePDF(
+    input
+) {
+
+    if (
+        !input.files ||
+        !input.files.length
+    ) {
+        return;
+    }
+
+
+    const file =
+        input.files[0];
+
+
+    if (
+        file.type !==
+        "application/pdf"
+    ) {
+
+        alert(
+            "Please select a PDF file."
+        );
+
+        input.value = "";
+
+        return;
+
+    }
+
+
+    const formData =
+        new FormData();
+
+
+    formData.append(
+        "file",
+        file
+    );
+
+
+    try {
+
+        showTemporaryPDFStatus(
+            file.name
+        );
+
+
+        const response =
+            await fetch(
+                PDF_API,
+                {
+                    method: "POST",
+                    body: formData
+                }
+            );
+
+
+        if (!response.ok) {
+
+            throw new Error(
+                "PDF server returned HTTP " +
+                response.status
+            );
+
+        }
+
+
+        const data =
+            await response.json();
+
+
+        console.log(
+            "PDF response:",
+            data
+        );
+
+
+        if (!data.success) {
+
+            throw new Error(
+                data.message ||
+                "PDF upload failed."
+            );
+
+        }
+
+
+        currentPDF = {
+
+            name:
+                data.filename,
+
+            pages:
+                data.pages,
+
+            characters:
+                data.text
+                    ? data.text.length
+                    : 0
+
+        };
+
+
+        showPDFStatus(
+            currentPDF
+        );
+
+
+        /*
+         * Automatically switch
+         * to PDF Tutor.
+         */
+
+        document
+            .getElementById(
+                "modeSelect"
+            )
+            .value =
+                "PDF Tutor";
+
+
+        input.value = "";
+
+
+        console.log(
+            "PDF ready:",
+            currentPDF
+        );
+
+
+    } catch (error) {
+
+        console.error(
+            "PDF upload error:",
+            error
+        );
+
+
+        hidePDFStatus();
+
+
+        alert(
+            "PDF upload failed.\n\n" +
+            error.message
+        );
+
+
+        input.value = "";
+
+    }
+
+}
+
+
+/* =========================
+   TEMP PDF STATUS
+========================= */
+
+function showTemporaryPDFStatus(
+    filename
+) {
+
+    const status =
+        document.getElementById(
+            "pdfStatus"
+        );
+
+
+    document
+        .getElementById(
+            "pdfName"
+        )
+        .textContent =
+            "Uploading " +
+            filename;
+
+
+    document
+        .getElementById(
+            "pdfDetails"
+        )
+        .textContent =
+            "Extracting PDF text...";
+
+
+    status.classList.add(
+        "show"
+    );
+
+}
+
+
+/* =========================
+   SHOW PDF STATUS
+========================= */
+
+function showPDFStatus(
+    pdf
+) {
+
+    const status =
+        document.getElementById(
+            "pdfStatus"
+        );
+
+
+    document
+        .getElementById(
+            "pdfName"
+        )
+        .textContent =
+            pdf.name;
+
+
+    document
+        .getElementById(
+            "pdfDetails"
+        )
+        .textContent =
+            pdf.pages +
+            " pages • " +
+            pdf.characters.toLocaleString() +
+            " characters extracted";
+
+
+    status.classList.add(
+        "show"
+    );
+
+}
+
+
+/* =========================
+   HIDE PDF STATUS
+========================= */
+
+function hidePDFStatus() {
+
+    const status =
+        document.getElementById(
+            "pdfStatus"
+        );
+
+
+    status.classList.remove(
+        "show"
+    );
+
+
+    currentPDF = null;
+
+}
+
+
+/* =========================
+   KEYBOARD
+========================= */
+
+function handleKey(event) {
+
+    if (
+        event.key === "Enter" &&
+        !event.shiftKey
+    ) {
+
+        event.preventDefault();
+
+        sendMessage();
+
+    }
+
+}
+
+
+/* =========================
+   AUTO RESIZE
+========================= */
+
+function autoResize(
+    textarea
+) {
+
+    textarea.style.height =
+        "auto";
+
+
+    textarea.style.height =
+        Math.min(
+            textarea.scrollHeight,
+            150
+        ) + "px";
+
+}
+
+
+/* =========================
+   SCROLL
+========================= */
+
+function scrollToBottom() {
+
+    setTimeout(
+        () => {
+
+            chatArea.scrollTop =
+                chatArea.scrollHeight;
+
+        },
+        50
+    );
+
+}
+
+
+/* =========================
+   LOCAL STORAGE
+========================= */
+
+function saveCurrentChat() {
+
+    localStorage.setItem(
+        "dentora_current_chat",
+        JSON.stringify(
+            chatMessages
+        )
+    );
+
+}
+
+
+function loadCurrentChat() {
+
+    const saved =
+        localStorage.getItem(
+            "dentora_current_chat"
+        );
+
+
+    if (!saved) {
+        return;
+    }
+
+
+    try {
+
+        chatMessages =
+            JSON.parse(
+                saved
+            );
+
+
+        if (
+            !Array.isArray(
+                chatMessages
+            )
+        ) {
+            chatMessages = [];
+            return;
+        }
+
+
+        if (
+            chatMessages.length
+        ) {
+
+            const welcome =
+                document.getElementById(
+                    "welcome"
+                );
+
+            if (welcome) {
+                welcome.remove();
+            }
+
+
+            chatMessages.forEach(
+                item => {
+
+                    if (
+                        item.user
+                    ) {
+
+                        addMessage(
+                            item.user,
+                            "user"
+                        );
+
+                    }
+
+                    if (
+                        item.ai
+                    ) {
+
+                        addMessage(
+                            item.ai,
+                            "ai",
+                            item.provider
+                        );
+
+                    }
+
+                }
+            );
+
+        }
+
+    } catch (error) {
+
+        console.error(
+            "Could not load chat:",
+            error
+        );
+
+    }
+
+}
+
+
+/* =========================
+   RECENT CHATS
+========================= */
+
+function renderRecentChats() {
+
+    const list =
+        document.getElementById(
+            "recentList"
+        );
+
+
+    list.innerHTML = "";
+
+
+    const saved =
+        localStorage.getItem(
+            "dentora_current_chat"
+        );
+
+
+    if (!saved) {
+
+        list.innerHTML = `
+            <div
+                style="
+                    padding:10px;
+                    color:#a0a5ad;
+                    font-size:12px;
+                "
+            >
+                No recent chats
+            </div>
+        `;
+
+        return;
+
+    }
+
+
+    try {
+
+        const chats =
+            JSON.parse(
+                saved
+            );
+
+
+        chats
+            .slice()
+            .reverse()
+            .slice(0, 10)
+            .forEach(
+                item => {
+
+                    if (!item.user) {
+                        return;
+                    }
+
+
+                    const div =
+                        document.createElement(
+                            "div"
+                        );
+
+
+                    div.className =
+                        "recent-item";
+
+
+                    div.textContent =
+                        item.user;
+
+
+                    div.onclick =
+                        () => {
+                            scrollToBottom();
+                        };
+
+
+                    list.appendChild(
+                        div
+                    );
+
+                }
+            );
+
+
+    } catch (error) {
+
+        console.error(
+            error
+        );
+
+    }
+
+}
+
+
+/* =========================
+   SEARCH CHATS
+========================= */
+
+function searchChats() {
+
+    const query =
+        document
+            .getElementById(
+                "searchChats"
+            )
+            .value
+            .toLowerCase();
+
+
+    document
+        .querySelectorAll(
+            ".recent-item"
+        )
+        .forEach(
+            item => {
+
+                item.style.display =
+                    item.textContent
+                        .toLowerCase()
+                        .includes(query)
+                        ? ""
+                        : "none";
+
+            }
+        );
+
+}
+
+
+/* =========================
+   WORKSPACE
+========================= */
+
+function setWorkspace(
+    workspace
+) {
+
+    console.log(
+        "Workspace:",
+        workspace
+    );
+
+}
+
+
+/* =========================
+   MOBILE SIDEBAR
+========================= */
+
+function toggleSidebar() {
+
+    document
+        .getElementById(
+            "sidebar"
+        )
+        .classList.toggle(
+            "open"
+        );
+
+}
+
+
+/* =========================
+   INITIALIZE
+========================= */
+
+document.addEventListener(
+    "DOMContentLoaded",
+    () => {
+
+        loadCurrentChat();
+
+        renderRecentChats();
+
+        messageInput.focus();
+
+    }
+);
+
+</script>
+
+</body>
+
+</html>
