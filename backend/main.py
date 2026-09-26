@@ -1,17 +1,31 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from pathlib import Path
+from pypdf import PdfReader
+from pdf2image import convert_from_bytes
 from google import genai
 from groq import Groq
 from openai import OpenAI
 from dotenv import load_dotenv
+import pytesseract
 import os
+import ollama
+
+
+# =========================
+# ENVIRONMENT
+# =========================
 
 load_dotenv()
 
+
+# =========================
+# APP
+# =========================
+
 app = FastAPI()
+
 
 app.add_middleware(
     CORSMiddleware,
@@ -20,6 +34,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
 
 # =========================
 # AI CLIENTS
@@ -32,24 +47,305 @@ gemini_client = genai.Client(
 groq_client = Groq(
     api_key=os.getenv("GROQ_API_KEY")
 )
+
 qwen_client = OpenAI(
     api_key=os.getenv("DASHSCOPE_API_KEY"),
     base_url="https://dashscope-intl.aliyuncs.com/compatible-mode/v1"
 )
+
+
+# =========================
+# CHAT REQUEST
+# =========================
 
 class ChatRequest(BaseModel):
     message: str
     mode: str
 
 
-@app.get("/")
-def home():
-    frontend = Path(__file__).parent.parent / "frontend" / "index.html"
-    return FileResponse(frontend)
+# =========================
+# PDF MEMORY
+# =========================
 
+uploaded_pdf_text = ""
+uploaded_pdf_name = ""
+uploaded_pdf_chunks = []
+
+
+def create_pdf_chunks(text, chunk_size=3000, overlap=300):
+
+    chunks = []
+
+    start = 0
+    text_length = len(text)
+
+    while start < text_length:
+
+        end = min(
+            start + chunk_size,
+            text_length
+        )
+
+        chunk = text[start:end].strip()
+
+        if chunk:
+            chunks.append(chunk)
+
+        if end >= text_length:
+            break
+
+        start = end - overlap
+
+    return chunks
+
+
+def find_relevant_pdf_chunks(
+    query,
+    chunks,
+    max_chunks=5
+):
+
+    if not chunks:
+        return []
+
+    query_words = {
+        word.lower().strip(
+            ".,!?;:()[]{}"
+        )
+        for word in query.split()
+        if len(word) > 2
+    }
+
+    scored_chunks = []
+
+    for chunk in chunks:
+
+        chunk_lower = chunk.lower()
+
+        score = 0
+
+        for word in query_words:
+
+            if word in chunk_lower:
+                score += 1
+
+        scored_chunks.append(
+            (score, chunk)
+        )
+
+    scored_chunks.sort(
+        key=lambda item: item[0],
+        reverse=True
+    )
+
+    relevant = [
+        chunk
+        for score, chunk in scored_chunks[:max_chunks]
+        if score > 0
+    ]
+
+    return relevant
+
+
+# =========================
+# ROOT
+# =========================
+
+@app.get("/")
+def root():
+
+    return {
+        "message": "Dentora backend is running."
+    }
+
+
+# =========================
+# PDF UPLOAD
+# =========================
+
+@app.post("/upload-pdf")
+async def upload_pdf(
+    file: UploadFile = File(...)
+):
+
+    if not file.filename.lower().endswith(".pdf"):
+
+        return {
+            "success": False,
+            "message": "Only PDF files are supported."
+        }
+
+    try:
+
+        contents = await file.read()
+
+        temp_path = Path(
+            "temp_uploaded.pdf"
+        )
+
+        temp_path.write_bytes(
+            contents
+        )
+
+        reader = PdfReader(
+            str(temp_path)
+        )
+
+        text = ""
+
+        for page in reader.pages:
+
+            page_text = (
+                page.extract_text()
+                or ""
+            )
+
+            text += (
+                page_text
+                + "\n"
+            )
+
+        # OCR fallback for scanned PDFs
+        if len(text.strip()) < 100:
+
+            images = convert_from_bytes(
+                contents,
+                dpi=200
+            )
+
+            text = ""
+
+            for image in images:
+
+                page_text = (
+                    pytesseract.image_to_string(
+                        image
+                    )
+                )
+
+                text += (
+                    page_text
+                    + "\n"
+                )
+
+        temp_path.unlink(
+            missing_ok=True
+        )
+
+        global uploaded_pdf_text
+        global uploaded_pdf_name
+        global uploaded_pdf_chunks
+
+        uploaded_pdf_text = text
+
+        uploaded_pdf_name = (
+            file.filename
+        )
+
+        uploaded_pdf_chunks = (
+            create_pdf_chunks(text)
+        )
+
+        print(
+            f"PDF uploaded: {file.filename}"
+        )
+
+        print(
+            f"Pages: {len(reader.pages)}"
+        )
+
+        print(
+            f"Characters: {len(text)}"
+        )
+
+        print(
+            f"Chunks: {len(uploaded_pdf_chunks)}"
+        )
+
+        return {
+
+            "success": True,
+
+            "filename":
+                file.filename,
+
+            "pages":
+                len(reader.pages),
+
+            "text":
+                text
+
+        }
+
+    except Exception as e:
+
+        print(
+            "PDF upload error:",
+            e
+        )
+
+        return {
+
+            "success": False,
+
+            "message":
+                str(e)
+
+        }
+
+
+# =========================
+# CHAT
+# =========================
 
 @app.post("/chat")
-def chat(request: ChatRequest):
+def chat(
+    request: ChatRequest
+):
+
+    # Student's actual question
+    message = request.message
+
+
+    # =========================
+    # PDF RETRIEVAL
+    # =========================
+
+    if uploaded_pdf_chunks:
+
+        relevant_chunks = (
+            find_relevant_pdf_chunks(
+                message,
+                uploaded_pdf_chunks
+            )
+        )
+
+        if relevant_chunks:
+
+            relevant_pdf = (
+                "\n\n".join(
+                    relevant_chunks
+                )
+            )
+
+        else:
+
+            relevant_pdf = (
+                "No directly relevant "
+                "PDF material was found "
+                "for this question."
+            )
+
+    else:
+
+        relevant_pdf = (
+            "No PDF has been uploaded."
+        )
+
+
+    # =========================
+    # PROMPT
+    # =========================
 
     prompt = f"""
 You are Dentora by Ehsan — a dedicated BDS-level dental education tutor.
@@ -62,229 +358,213 @@ CURRENT MODE:
 {request.mode}
 
 STUDENT'S QUESTION:
-{request.message}
+{message}
 
+UPLOADED PDF MATERIAL:
+---------------------
+{relevant_pdf}
 
-GENERAL ANSWERING RULES
------------------------
-1. Give accurate, BDS-level information.
-2. Prioritize examination-relevant information.
-3. Do not unnecessarily make answers extremely long.
-4. Organize information clearly with headings and subheadings.
-5. Prefer short paragraphs, bullet points, numbered lists, and tables where useful.
-6. Bold important terms and examination pearls.
-7. Explain difficult concepts in simple language before adding advanced detail.
-8. Distinguish HIGH-YIELD information from additional detail.
-9. Do not repeat the same information in multiple sections.
-10. Never invent facts, references, guidelines, statistics, or textbook quotations.
-11. If information is uncertain, controversial, or dependent on a guideline,
-    clearly state that.
-12. If the question is ambiguous, state the assumption briefly.
-13. Use correct dental and medical terminology.
-14. When appropriate, include clinical correlation.
-15. When appropriate, end with a short "Exam Pearls" section.
+PDF INSTRUCTIONS:
+----------------
+If PDF material is available:
 
+- Use it as the primary source for questions related to the uploaded material.
+- Base explanations on the supplied PDF content.
+- Prioritize the PDF's terminology, classifications, explanations, and sequence.
+- You may add relevant BDS-level background knowledge when useful.
+- Do not invent information that is not supported by the PDF or established medical/dental knowledge.
+- If the PDF does not contain enough information to answer the question, say so briefly and then provide relevant background knowledge.
 
-FOR DENTAL TOPICS
------------------
-When relevant, cover:
-- Definition
-- Classification
-- Etiology / risk factors
-- Pathogenesis
-- Clinical features
-- Diagnosis / investigations
-- Differential diagnosis
-- Management
-- Complications
-- Prevention
-- Clinical correlation
-- Viva / MCQ pearls
+GENERAL INSTRUCTIONS:
+---------------------
+- Answer at final-year BDS level.
+- Be accurate and clinically relevant.
+- Explain concepts clearly.
+- For examinations, emphasize high-yield points.
+- For viva questions, give concise viva-ready answers.
+- For OSCE questions, focus on identification, clinical findings, steps, interpretation, and key points.
+- Use tables when useful.
+- Use bullet points for examination-friendly information.
+- Do not unnecessarily repeat the student's question.
 
-Do NOT force all of these sections into every answer.
-Only include sections relevant to the question.
-
-
-STUDY CHAT MODE
----------------
-Teach the concept clearly.
-
-Preferred structure when appropriate:
-
-## Definition
-
-## Key Concept
-
-## Classification
-
-## Clinical Features
-
-## Diagnosis
-
-## Management
-
-## Exam Pearls
-
-Only use the sections that actually apply.
-
-
-MCQ MODE
----------
-Act as a BDS examination tutor.
-
-If the student provides an MCQ:
-1. State the correct answer clearly.
-2. Explain why it is correct.
-3. Explain briefly why the other options are incorrect.
-4. Identify the key clue or trap in the question.
-5. Give a short exam pearl.
-
-If the student asks to be tested:
-- Ask ONE MCQ at a time.
-- Do not reveal the answer before the student responds.
-- Wait for the student's answer before explaining it.
-- Vary difficulty between basic, moderate, and tricky BDS-level questions.
-
-
-VIVA MODE
----------
-Act like a dental viva examiner.
-
-When teaching:
-- Give the direct viva answer first.
-- Keep the first answer concise.
-- Then provide the explanation.
-- Highlight common follow-up questions.
-- Include important examiner traps.
-
-When conducting a viva:
-- Ask ONE question at a time.
-- Wait for the student's answer.
-- Then evaluate it and continue with the next question.
-
-
-OSCE MODE
----------
-Structure answers as an OSCE station.
-
-When relevant include:
-1. Introduction
-2. Consent
-3. Patient positioning
-4. Equipment
-5. Examination / procedure sequence
-6. Important findings
-7. Interpretation
-8. Diagnosis
-9. Management / next step
-10. Safety points
-
-For examination stations, describe the sequence in the order
-the student should actually perform it.
-
-
-PDF TUTOR MODE
---------------
-When PDF material has actually been provided:
-- Base the answer on the provided material.
-- Prioritize the supplied material for exam preparation.
-- Clearly distinguish information from the PDF from additional background knowledge.
-
-Never claim that you have read or analyzed a PDF unless its contents
-have actually been provided to you.
-
-
-ANSWER STYLE
-------------
-Make answers visually easy to study.
-
-Use:
-- Clear headings
-- Short paragraphs
-- Bullet points
-- Numbered steps
-- Tables when comparison is useful
-- Bold high-yield terms
-- "Exam Pearl" callouts when appropriate
-
-Avoid:
-- Huge unbroken paragraphs
-- Excessive repetition
-- Unnecessary filler
-- Overly complicated language
-- Excessive emojis
-
-Now answer the student's question according to the current mode.
+Answer the student's question now.
 """
 
 
     # =========================
-    # PRIMARY: GEMINI
+    # GEMINI
     # =========================
+
     try:
-        response = gemini_client.models.generate_content(
-            model="gemini-3.5-flash",
-            contents=prompt
+
+        response = (
+            gemini_client.models.generate_content(
+                model="gemini-3.5-flash",
+                contents=prompt
+            )
         )
 
         return {
-            "reply": response.text
+
+            "response":
+                response.text,
+
+            "provider":
+                "Gemini"
+
         }
 
     except Exception as gemini_error:
 
-        error_text = str(gemini_error)
+        print(
+            "Gemini error:",
+            gemini_error
+        )
 
-        if (
-            "429" not in error_text
-            and "503" not in error_text
-            and "RESOURCE_EXHAUSTED" not in error_text
-            and "UNAVAILABLE" not in error_text
+        error_text = str(
+            gemini_error
+        )
+
+        if not any(
+            code in error_text
+            for code in [
+                "429",
+                "503",
+                "RESOURCE_EXHAUSTED",
+                "UNAVAILABLE"
+            ]
         ):
+
+            print(
+                "Gemini error is not "
+                "eligible for fallback."
+            )
+
             return {
-                "reply": f"Gemini error: {error_text}"
+
+                "response":
+                    "Dentora couldn't connect to the AI service. Please try again.",
+
+                "provider":
+                    "Error"
+
             }
 
-        try:
-            groq_response = groq_client.chat.completions.create(
+
+    # =========================
+    # GROQ FALLBACK
+    # =========================
+
+    try:
+
+        response = (
+            groq_client.chat.completions.create(
                 model="openai/gpt-oss-120b",
                 messages=[
                     {
                         "role": "user",
                         "content": prompt
                     }
-                ],
-                include_reasoning=False
+                ]
             )
+        )
 
-            return {
-                "reply": groq_response.choices[0].message.content
-            }
+        return {
 
-        except Exception as groq_error:
+            "response":
+                response.choices[0].message.content,
 
-            try:
-                qwen_response = qwen_client.chat.completions.create(
-                    model="qwen-plus",
-                    messages=[
-                        {
-                            "role": "user",
-                            "content": prompt
-                        }
-                    ]
-                )
+            "provider":
+                "Groq"
 
-                return {
-                    "reply": qwen_response.choices[0].message.content
+        }
+
+    except Exception as groq_error:
+
+        print(
+            "Groq error:",
+            groq_error
+        )
+
+
+    # =========================
+    # QWEN API FALLBACK
+    # =========================
+
+    try:
+
+        response = (
+            qwen_client.chat.completions.create(
+                model="qwen-plus",
+                messages=[
+                    {
+                        "role": "user",
+                        "content": prompt
+                    }
+                ]
+            )
+        )
+
+        return {
+
+            "response":
+                response.choices[0].message.content,
+
+            "provider":
+                "Qwen API"
+
+        }
+
+    except Exception as qwen_error:
+
+        print(
+            "Qwen API error:",
+            qwen_error
+        )
+
+
+    # =========================
+    # LOCAL OLLAMA FALLBACK
+    # =========================
+
+    try:
+
+        response = ollama.chat(
+
+            model="qwen3:8b",
+
+            messages=[
+                {
+                    "role": "user",
+                    "content": prompt
                 }
+            ]
 
-            except Exception as qwen_error:
+        )
 
-                return {
-                    "reply": (
-                        "All AI providers are currently unavailable.\n\n"
-                        f"Gemini: {error_text}\n\n"
-                        f"Groq: {str(groq_error)}\n\n"
-                        f"Qwen: {str(qwen_error)}"
-                    )
-                }
+        return {
+
+            "response":
+                response["message"]["content"],
+
+            "provider":
+                "Local Qwen"
+
+        }
+
+    except Exception as ollama_error:
+
+        print(
+            "Ollama error:",
+            ollama_error
+        )
+
+        return {
+
+            "response":
+                "Dentora couldn't connect to the AI service. Please try again.",
+
+            "provider":
+                "Error"
+
+        }
