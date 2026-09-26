@@ -5,3 +5,9 @@ python-dotenv
 groq
 openai
 pypdf
+pdf2image
+Pillow
+packaging
+ollama
+python-multipart
+pytesseract
