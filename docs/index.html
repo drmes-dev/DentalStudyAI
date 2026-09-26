@@ -2014,23 +2014,18 @@ function autoResize(
             150
         ) + "px";
 }
-
-
 function handleKeyDown(event) {
 
-    if (
-        event.key === "Enter" &&
-        !event.shiftKey
-    ) {
+    if (event.key === "Enter" && !event.shiftKey) {
 
         event.preventDefault();
+        event.stopPropagation();
 
         sendMessage();
 
     }
 
 }
-
 
 /* =========================================================
    SEND MESSAGE
