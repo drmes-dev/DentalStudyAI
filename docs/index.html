@@ -1,45 +1,37 @@
 <!DOCTYPE html>
-
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0, maximum-scale=1.0"
+/>
+
+<meta
+    name="description"
+    content="Dentora by Ehsan — AI-powered BDS study assistant for MCQs, viva, OSCE and PDF learning."
+>
 
 <title>Dentora by Ehsan</title>
-
-<meta name="description" content="Dentora by Ehsan — AI-powered BDS dental education tutor.">
-<meta name="theme-color" content="#07111f">
 
 <style>
 
 :root {
     --bg: #07111f;
-    --bg-2: #0b1728;
-    --panel: rgba(15, 28, 46, 0.78);
-    --panel-solid: #0d1b2d;
-    --panel-light: rgba(255,255,255,0.055);
-
-    --text: #f4f8ff;
-    --muted: #91a3ba;
-    --muted-2: #667b94;
-
-    --accent: #61d7c5;
-    --accent-2: #78a9ff;
-    --accent-soft: rgba(97,215,197,0.12);
-
-    --border: rgba(255,255,255,0.08);
-    --border-light: rgba(255,255,255,0.12);
-
-    --danger: #ff7185;
-
-    --shadow:
-        0 24px 70px rgba(0,0,0,0.35);
-
-    --radius-xl: 24px;
-    --radius-lg: 18px;
-    --radius-md: 14px;
-
-    --sidebar-width: 275px;
+    --bg2: #0b1728;
+    --panel: rgba(14, 27, 45, 0.76);
+    --panel-strong: rgba(17, 32, 53, 0.94);
+    --border: rgba(255,255,255,0.09);
+    --border-light: rgba(255,255,255,0.14);
+    --text: #edf4ff;
+    --muted: #8fa3bb;
+    --accent: #67e8f9;
+    --accent2: #818cf8;
+    --success: #4ade80;
+    --danger: #fb7185;
+    --shadow: 0 25px 80px rgba(0,0,0,.38);
+    --radius: 20px;
 }
 
 * {
@@ -48,9 +40,9 @@
 
 html,
 body {
-    margin: 0;
     width: 100%;
     height: 100%;
+    margin: 0;
 }
 
 body {
@@ -66,20 +58,20 @@ body {
     background:
         radial-gradient(
             circle at 10% 10%,
-            rgba(97,215,197,0.09),
+            rgba(103,232,249,.10),
             transparent 28%
         ),
         radial-gradient(
-            circle at 90% 20%,
-            rgba(120,169,255,0.10),
+            circle at 90% 15%,
+            rgba(129,140,248,.12),
             transparent 30%
         ),
-        linear-gradient(
-            135deg,
-            var(--bg),
-            #091526 50%,
-            #06101c
-        );
+        radial-gradient(
+            circle at 50% 100%,
+            rgba(34,211,238,.06),
+            transparent 35%
+        ),
+        var(--bg);
 
     color: var(--text);
     overflow: hidden;
@@ -89,38 +81,55 @@ body {
    BACKGROUND
 ========================= */
 
-.background-orb {
+.background {
     position: fixed;
+    inset: 0;
+    pointer-events: none;
+    overflow: hidden;
+    z-index: 0;
+}
+
+.orb {
+    position: absolute;
+    border-radius: 50%;
+    filter: blur(80px);
+    opacity: .18;
+    animation: floatOrb 14s ease-in-out infinite;
+}
+
+.orb.one {
+    width: 320px;
+    height: 320px;
+    background: #22d3ee;
+    top: -100px;
+    left: -80px;
+}
+
+.orb.two {
     width: 360px;
     height: 360px;
-    border-radius: 50%;
-    filter: blur(90px);
-    opacity: 0.12;
-    pointer-events: none;
-    z-index: 0;
-    animation: floatOrb 12s ease-in-out infinite alternate;
+    background: #6366f1;
+    right: -120px;
+    top: 20%;
+    animation-delay: -5s;
 }
 
-.orb-one {
-    background: var(--accent);
-    top: -180px;
-    left: 25%;
-}
-
-.orb-two {
-    background: var(--accent-2);
-    right: -180px;
+.orb.three {
+    width: 280px;
+    height: 280px;
+    background: #06b6d4;
     bottom: -100px;
-    animation-delay: 3s;
+    left: 35%;
+    animation-delay: -9s;
 }
 
 @keyframes floatOrb {
-    from {
+    0%,100% {
         transform: translate3d(0,0,0) scale(1);
     }
 
-    to {
-        transform: translate3d(25px,18px,0) scale(1.08);
+    50% {
+        transform: translate3d(35px,-25px,0) scale(1.08);
     }
 }
 
@@ -131,10 +140,9 @@ body {
 .app {
     position: relative;
     z-index: 1;
-
-    display: flex;
     width: 100%;
     height: 100vh;
+    display: flex;
 }
 
 /* =========================
@@ -142,90 +150,61 @@ body {
 ========================= */
 
 .sidebar {
-    width: var(--sidebar-width);
+    width: 290px;
     height: 100%;
-
+    padding: 18px;
     display: flex;
     flex-direction: column;
+    gap: 14px;
 
-    padding: 22px 16px;
-
-    background:
-        linear-gradient(
-            180deg,
-            rgba(9,23,39,0.94),
-            rgba(7,18,31,0.88)
-        );
+    background: rgba(5, 15, 28, .72);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
 
     border-right: 1px solid var(--border);
 
-    backdrop-filter: blur(24px);
-
-    transition:
-        transform .3s ease,
-        width .3s ease;
-
-    z-index: 20;
+    transition: transform .3s ease;
 }
-
-/* Brand */
 
 .brand {
     display: flex;
     align-items: center;
     gap: 12px;
-
-    padding: 3px 8px 24px;
+    padding: 8px 4px 14px;
 }
 
 .brand-logo {
-    width: 42px;
-    height: 42px;
+    width: 44px;
+    height: 44px;
+    border-radius: 14px;
 
     display: flex;
     align-items: center;
     justify-content: center;
 
-    border-radius: 14px;
-
-    font-size: 21px;
+    font-size: 22px;
     font-weight: 800;
-
-    color: #07151c;
 
     background:
         linear-gradient(
             135deg,
-            var(--accent),
-            var(--accent-2)
+            rgba(103,232,249,.25),
+            rgba(129,140,248,.25)
         );
 
+    border: 1px solid rgba(103,232,249,.22);
+
     box-shadow:
-        0 8px 28px rgba(97,215,197,0.18);
-
-    animation: logoPulse 4s ease-in-out infinite;
+        0 0 30px rgba(103,232,249,.10);
 }
 
-@keyframes logoPulse {
-    0%,100% {
-        box-shadow:
-            0 8px 28px rgba(97,215,197,0.15);
-    }
-
-    50% {
-        box-shadow:
-            0 8px 38px rgba(120,169,255,0.25);
-    }
+.brand-text h1 {
+    margin: 0;
+    font-size: 17px;
+    letter-spacing: -.3px;
 }
 
-.brand-title {
-    font-size: 18px;
-    font-weight: 750;
-    letter-spacing: -0.4px;
-}
-
-.brand-subtitle {
-    margin-top: 2px;
+.brand-text span {
     color: var(--muted);
     font-size: 11px;
 }
@@ -234,242 +213,186 @@ body {
 
 .new-chat {
     width: 100%;
-
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-
-    border: 1px solid rgba(97,215,197,0.20);
-    border-radius: 13px;
-
-    padding: 12px;
-
-    color: #dffefa;
-
-    background:
-        linear-gradient(
-            135deg,
-            rgba(97,215,197,0.14),
-            rgba(120,169,255,0.08)
-        );
+    border: 1px solid var(--border-light);
+    background: rgba(255,255,255,.045);
+    color: var(--text);
+    padding: 12px 14px;
+    border-radius: 14px;
 
     cursor: pointer;
 
+    display: flex;
+    align-items: center;
+    gap: 9px;
+
     font-size: 13px;
-    font-weight: 650;
-
-    transition:
-        transform .2s ease,
-        background .2s ease,
-        border-color .2s ease;
-}
-
-.new-chat:hover {
-    transform: translateY(-2px);
-    border-color: rgba(97,215,197,0.42);
-
-    background:
-        linear-gradient(
-            135deg,
-            rgba(97,215,197,0.20),
-            rgba(120,169,255,0.12)
-        );
-}
-
-/* Search */
-
-.search-box {
-    margin-top: 16px;
-    position: relative;
-}
-
-.search-box input {
-    width: 100%;
-
-    padding: 11px 13px 11px 36px;
-
-    border-radius: 12px;
-    border: 1px solid var(--border);
-
-    outline: none;
-
-    color: var(--text);
-    background: rgba(255,255,255,0.035);
-
-    font-size: 12px;
+    font-weight: 600;
 
     transition: .2s ease;
 }
 
-.search-box input:focus {
-    border-color: rgba(97,215,197,0.38);
-    background: rgba(255,255,255,0.055);
+.new-chat:hover {
+    background: rgba(255,255,255,.08);
+    transform: translateY(-1px);
 }
 
-.search-icon {
-    position: absolute;
-    left: 12px;
-    top: 10px;
+/* Mode cards */
 
-    color: var(--muted-2);
-    font-size: 14px;
-}
-
-/* Navigation */
-
-.nav-label {
-    margin: 24px 8px 8px;
-
-    color: var(--muted-2);
-
+.section-title {
+    color: var(--muted);
     font-size: 10px;
     font-weight: 700;
-    letter-spacing: 1.2px;
+    letter-spacing: .12em;
     text-transform: uppercase;
+    margin: 7px 3px 3px;
 }
 
-.nav-item {
+.mode-list {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.mode {
     width: 100%;
+    padding: 10px;
+    border-radius: 13px;
 
     display: flex;
     align-items: center;
     gap: 11px;
 
-    padding: 11px 12px;
-    margin-bottom: 3px;
-
-    border: 0;
-    border-radius: 12px;
-
     color: var(--muted);
-
     background: transparent;
+    border: 1px solid transparent;
 
     cursor: pointer;
-
     text-align: left;
-    font-size: 13px;
-
-    transition:
-        color .2s ease,
-        background .2s ease,
-        transform .2s ease;
-}
-
-.nav-item:hover {
-    color: var(--text);
-    background: rgba(255,255,255,0.045);
-    transform: translateX(2px);
-}
-
-.nav-item.active {
-    color: #e9fffb;
-
-    background:
-        linear-gradient(
-            90deg,
-            rgba(97,215,197,0.13),
-            rgba(120,169,255,0.05)
-        );
-
-    border: 1px solid rgba(97,215,197,0.08);
-}
-
-.nav-icon {
-    width: 22px;
-    text-align: center;
-    font-size: 15px;
-}
-
-/* Recent */
-
-.recent {
-    flex: 1;
-    overflow-y: auto;
-    margin-top: 2px;
-}
-
-.recent::-webkit-scrollbar {
-    width: 4px;
-}
-
-.recent::-webkit-scrollbar-thumb {
-    background: rgba(255,255,255,0.10);
-    border-radius: 10px;
-}
-
-.recent-chat {
-    padding: 9px 10px;
-    margin-bottom: 3px;
-
-    border-radius: 10px;
-
-    color: var(--muted);
-
-    cursor: pointer;
-
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-
-    font-size: 12px;
 
     transition: .2s ease;
 }
 
-.recent-chat:hover {
-    background: rgba(255,255,255,0.04);
+.mode:hover {
     color: var(--text);
+    background: rgba(255,255,255,.045);
 }
 
-/* Sidebar bottom */
-
-.sidebar-footer {
-    padding-top: 15px;
-    border-top: 1px solid var(--border);
+.mode.active {
+    color: var(--text);
+    background: rgba(103,232,249,.08);
+    border-color: rgba(103,232,249,.12);
 }
 
-.profile-card {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-
-    padding: 9px;
-}
-
-.profile-avatar {
-    width: 34px;
-    height: 34px;
+.mode-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: 10px;
 
     display: flex;
     align-items: center;
     justify-content: center;
 
+    background: rgba(255,255,255,.045);
+}
+
+.mode-name {
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.mode-description {
+    font-size: 10px;
+    color: var(--muted);
+    margin-top: 2px;
+}
+
+/* Chat history */
+
+.history {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    padding-right: 2px;
+}
+
+.history::-webkit-scrollbar {
+    width: 4px;
+}
+
+.history::-webkit-scrollbar-thumb {
+    background: rgba(255,255,255,.12);
+    border-radius: 10px;
+}
+
+.chat-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+
+    width: 100%;
+    padding: 10px;
+    margin-bottom: 4px;
+
+    border: 1px solid transparent;
     border-radius: 11px;
 
-    background:
-        linear-gradient(
-            135deg,
-            rgba(97,215,197,0.25),
-            rgba(120,169,255,0.22)
-        );
+    color: var(--muted);
+    background: transparent;
 
-    color: #dffefa;
+    cursor: pointer;
+    text-align: left;
 
-    font-size: 13px;
-    font-weight: 700;
+    transition: .2s ease;
 }
 
-.profile-name {
-    font-size: 12px;
-    font-weight: 650;
+.chat-item:hover {
+    color: var(--text);
+    background: rgba(255,255,255,.04);
 }
 
-.profile-role {
-    margin-top: 2px;
-    color: var(--muted-2);
+.chat-item.active {
+    color: var(--text);
+    background: rgba(255,255,255,.06);
+    border-color: var(--border);
+}
+
+.chat-title {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+
+    font-size: 11px;
+}
+
+.empty-history {
+    color: #60758e;
+    font-size: 11px;
+    text-align: center;
+    padding: 20px 10px;
+}
+
+/* Sidebar footer */
+
+.sidebar-footer {
+    border-top: 1px solid var(--border);
+    padding-top: 12px;
+}
+
+.status-pill {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+
+    color: var(--muted);
     font-size: 10px;
+}
+
+.status-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--success);
+    box-shadow: 0 0 10px rgba(74,222,128,.6);
 }
 
 /* =========================
@@ -477,49 +400,49 @@ body {
 ========================= */
 
 .main {
-    flex: 1;
     min-width: 0;
+    flex: 1;
     height: 100%;
-
     display: flex;
     flex-direction: column;
-
-    position: relative;
 }
 
-/* Top bar */
+/* Header */
 
-.topbar {
-    height: 70px;
+.header {
+    height: 72px;
     flex-shrink: 0;
 
     display: flex;
     align-items: center;
     justify-content: space-between;
 
-    padding: 0 26px;
+    padding: 0 25px;
 
     border-bottom: 1px solid var(--border);
 
-    background: rgba(6,16,28,0.50);
-    backdrop-filter: blur(22px);
+    background: rgba(7,17,31,.42);
+    backdrop-filter: blur(20px);
 }
 
-.topbar-left {
+.header-left {
     display: flex;
     align-items: center;
-    gap: 13px;
+    gap: 12px;
 }
 
 .mobile-menu {
     display: none;
 
-    border: 0;
-    background: transparent;
+    width: 38px;
+    height: 38px;
 
+    border: 1px solid var(--border);
+    border-radius: 11px;
+
+    background: rgba(255,255,255,.04);
     color: var(--text);
 
-    font-size: 22px;
     cursor: pointer;
 }
 
@@ -529,139 +452,125 @@ body {
 }
 
 .page-subtitle {
-    margin-top: 2px;
     color: var(--muted);
-    font-size: 11px;
+    font-size: 10px;
+    margin-top: 3px;
 }
 
-.status-pill {
+.header-right {
     display: flex;
     align-items: center;
-    gap: 7px;
+    gap: 9px;
+}
 
-    padding: 7px 11px;
+.pdf-badge {
+    display: none;
 
-    border: 1px solid rgba(97,215,197,0.12);
+    align-items: center;
+    gap: 6px;
+
+    padding: 7px 10px;
     border-radius: 999px;
 
-    background: rgba(97,215,197,0.055);
-
-    color: #a6e9df;
-
     font-size: 10px;
+    color: var(--accent);
+
+    border: 1px solid rgba(103,232,249,.16);
+    background: rgba(103,232,249,.06);
 }
 
-.status-dot {
-    width: 7px;
-    height: 7px;
-    border-radius: 50%;
+.icon-button {
+    width: 36px;
+    height: 36px;
 
-    background: var(--accent);
+    display: flex;
+    align-items: center;
+    justify-content: center;
 
-    box-shadow:
-        0 0 0 4px rgba(97,215,197,0.08),
-        0 0 12px rgba(97,215,197,0.5);
+    border-radius: 11px;
+    border: 1px solid var(--border);
 
-    animation: statusBlink 2s ease-in-out infinite;
+    background: rgba(255,255,255,.035);
+    color: var(--muted);
+
+    cursor: pointer;
+    transition: .2s ease;
 }
 
-@keyframes statusBlink {
-    50% {
-        opacity: .55;
-    }
+.icon-button:hover {
+    color: var(--text);
+    background: rgba(255,255,255,.07);
 }
 
 /* =========================
-   CHAT
+   WELCOME
 ========================= */
 
-.chat-area {
+.welcome {
     flex: 1;
     overflow-y: auto;
-
-    padding: 34px 20px 145px;
-}
-
-.chat-area::-webkit-scrollbar {
-    width: 6px;
-}
-
-.chat-area::-webkit-scrollbar-thumb {
-    background: rgba(255,255,255,0.09);
-    border-radius: 10px;
-}
-
-.chat-inner {
-    width: min(900px, 100%);
-    margin: 0 auto;
-}
-
-/* Welcome */
-
-.welcome {
-    min-height: 60vh;
 
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
 
-    text-align: center;
-
-    animation: welcomeIn .65s ease both;
+    padding: 40px 24px;
 }
 
-@keyframes welcomeIn {
-    from {
-        opacity: 0;
-        transform: translateY(15px);
-    }
-
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
+.welcome.hidden {
+    display: none;
 }
 
 .welcome-logo {
-    width: 72px;
-    height: 72px;
+    width: 74px;
+    height: 74px;
 
     display: flex;
     align-items: center;
     justify-content: center;
 
-    border-radius: 23px;
+    border-radius: 24px;
+
+    font-size: 34px;
 
     background:
         linear-gradient(
             135deg,
-            rgba(97,215,197,0.18),
-            rgba(120,169,255,0.18)
+            rgba(103,232,249,.14),
+            rgba(129,140,248,.14)
         );
 
-    border: 1px solid rgba(255,255,255,0.10);
+    border: 1px solid rgba(103,232,249,.18);
 
     box-shadow:
-        0 20px 60px rgba(0,0,0,0.22);
+        0 0 70px rgba(103,232,249,.08);
 
-    font-size: 32px;
-
-    margin-bottom: 20px;
+    animation: logoFloat 4s ease-in-out infinite;
 }
 
-.welcome h1 {
-    margin: 0;
+@keyframes logoFloat {
+    0%,100% {
+        transform: translateY(0);
+    }
 
-    font-size: clamp(28px, 4vw, 42px);
-    letter-spacing: -1.5px;
+    50% {
+        transform: translateY(-7px);
+    }
+}
 
+.welcome h2 {
+    margin: 22px 0 8px;
+    font-size: 29px;
+    letter-spacing: -.8px;
+}
+
+.welcome h2 span {
     background:
         linear-gradient(
-            110deg,
-            #ffffff,
-            #bcece6,
-            #a9c5ff
+            90deg,
+            var(--accent),
+            var(--accent2)
         );
 
     -webkit-background-clip: text;
@@ -670,88 +579,101 @@ body {
 }
 
 .welcome p {
-    max-width: 570px;
+    max-width: 520px;
+    text-align: center;
 
-    margin: 12px auto 25px;
+    margin: 0;
 
     color: var(--muted);
+    font-size: 13px;
     line-height: 1.7;
-
-    font-size: 14px;
 }
 
-.mode-cards {
+/* Suggestion cards */
+
+.suggestions {
+    width: min(780px, 100%);
+    margin-top: 30px;
+
     display: grid;
-
-    grid-template-columns:
-        repeat(4, minmax(0,1fr));
-
+    grid-template-columns: repeat(2, 1fr);
     gap: 10px;
-
-    width: 100%;
-    max-width: 730px;
 }
 
-.mode-card {
-    padding: 15px 12px;
-
-    border: 1px solid var(--border);
-    border-radius: 16px;
-
-    background: rgba(255,255,255,0.035);
-
+.suggestion {
+    padding: 15px;
     text-align: left;
 
+    border: 1px solid var(--border);
+    background: rgba(255,255,255,.025);
+    border-radius: 15px;
+
+    color: var(--text);
     cursor: pointer;
 
-    transition:
-        transform .22s ease,
-        border-color .22s ease,
-        background .22s ease;
+    transition: .22s ease;
 }
 
-.mode-card:hover {
-    transform: translateY(-4px);
-
-    border-color:
-        rgba(97,215,197,0.25);
-
-    background:
-        rgba(255,255,255,0.055);
+.suggestion:hover {
+    background: rgba(255,255,255,.055);
+    border-color: rgba(103,232,249,.16);
+    transform: translateY(-2px);
 }
 
-.mode-card-icon {
-    font-size: 19px;
-    margin-bottom: 9px;
-}
-
-.mode-card-title {
+.suggestion-title {
     font-size: 12px;
     font-weight: 700;
 }
 
-.mode-card-text {
-    margin-top: 4px;
+.suggestion-text {
     color: var(--muted);
     font-size: 10px;
-    line-height: 1.45;
+    margin-top: 5px;
 }
 
-/* Messages */
+/* =========================
+   CHAT
+========================= */
 
-.message {
+.chat-container {
+    flex: 1;
+    min-height: 0;
+
     display: flex;
-    gap: 12px;
+    flex-direction: column;
 
-    margin-bottom: 26px;
+    overflow: hidden;
+}
 
-    animation: messageIn .3s ease both;
+.messages {
+    flex: 1;
+    overflow-y: auto;
+
+    padding: 30px max(24px, calc((100% - 900px) / 2));
+
+    scroll-behavior: smooth;
+}
+
+.messages::-webkit-scrollbar {
+    width: 5px;
+}
+
+.messages::-webkit-scrollbar-thumb {
+    background: rgba(255,255,255,.1);
+    border-radius: 10px;
+}
+
+.message-row {
+    display: flex;
+    margin-bottom: 22px;
+
+    animation: messageIn .25s ease;
 }
 
 @keyframes messageIn {
     from {
         opacity: 0;
-        transform: translateY(8px);
+        transform: translateY(7px);
     }
 
     to {
@@ -760,447 +682,363 @@ body {
     }
 }
 
-.message.user {
+.message-row.user {
     justify-content: flex-end;
 }
 
-.avatar {
-    flex-shrink: 0;
-
-    width: 34px;
-    height: 34px;
-
-    display: flex;
-    align-items: center;
-    justify-content: center;
-
-    border-radius: 11px;
-
-    font-size: 12px;
-    font-weight: 750;
+.message {
+    max-width: 82%;
 }
 
-.message.ai .avatar {
-    color: #07151c;
-
-    background:
-        linear-gradient(
-            135deg,
-            var(--accent),
-            var(--accent-2)
-        );
-}
-
-.message.user .avatar {
-    color: #dce8f7;
-    background: rgba(255,255,255,0.09);
-}
-
-.message-content {
-    max-width: min(780px, 82%);
+.message.user-message {
+    max-width: 75%;
 }
 
 .message-bubble {
-    padding: 14px 17px;
-
-    border: 1px solid var(--border);
+    padding: 13px 16px;
 
     border-radius: 17px;
 
-    background:
-        rgba(255,255,255,0.035);
+    font-size: 13px;
+    line-height: 1.65;
 
-    color: #e8eef7;
-
-    font-size: 14px;
-    line-height: 1.7;
-
+    white-space: pre-wrap;
     overflow-wrap: anywhere;
 }
 
-.message.user .message-bubble {
+.ai-message .message-bubble {
+    background: rgba(255,255,255,.045);
+    border: 1px solid var(--border);
+    border-top-left-radius: 6px;
+}
+
+.user-message .message-bubble {
     background:
         linear-gradient(
             135deg,
-            rgba(97,215,197,0.11),
-            rgba(120,169,255,0.08)
+            rgba(103,232,249,.13),
+            rgba(129,140,248,.14)
         );
 
-    border-color:
-        rgba(97,215,197,0.12);
+    border: 1px solid rgba(103,232,249,.13);
+    border-top-right-radius: 6px;
 }
 
 .message-meta {
     margin-top: 6px;
-
-    color: var(--muted-2);
-
+    color: #60758e;
     font-size: 9px;
 }
 
-.provider-label {
-    color: #73d7ca;
+.user .message-meta {
+    text-align: right;
 }
 
-/* Basic markdown */
+.provider {
+    color: var(--accent);
+}
+
+/* Markdown-like formatting */
 
 .message-bubble strong {
-    color: #ffffff;
+    font-weight: 750;
 }
 
-.message-bubble em {
-    color: #c8d5e5;
+.message-bubble code {
+    padding: 2px 5px;
+    border-radius: 5px;
+
+    background: rgba(0,0,0,.25);
+
+    font-family: Consolas, monospace;
+    font-size: 11px;
 }
 
-.message-bubble h1,
-.message-bubble h2,
-.message-bubble h3 {
-    margin-top: 18px;
-    margin-bottom: 7px;
+.message-bubble pre {
+    overflow-x: auto;
 
-    color: #f6fbff;
+    padding: 12px;
+    border-radius: 10px;
 
-    line-height: 1.3;
-}
-
-.message-bubble h1 {
-    font-size: 20px;
-}
-
-.message-bubble h2 {
-    font-size: 17px;
-}
-
-.message-bubble h3 {
-    font-size: 15px;
+    background: rgba(0,0,0,.3);
 }
 
 .message-bubble ul,
 .message-bubble ol {
-    padding-left: 22px;
+    padding-left: 20px;
 }
 
-.message-bubble li {
-    margin: 5px 0;
+.message-bubble table {
+    border-collapse: collapse;
+    width: 100%;
 }
 
-.message-bubble code {
-    padding: 2px 6px;
-
-    border-radius: 6px;
-
-    background: rgba(0,0,0,0.25);
-
-    color: #b8f0e8;
-
-    font-family: monospace;
+.message-bubble th,
+.message-bubble td {
+    border: 1px solid var(--border-light);
+    padding: 7px;
 }
 
-.message-bubble pre {
-    padding: 14px;
+/* Copy button */
 
-    overflow-x: auto;
-
-    border-radius: 12px;
-
-    background: rgba(0,0,0,0.28);
+.message-actions {
+    display: flex;
+    gap: 5px;
+    margin-top: 7px;
 }
 
-/* =========================
-   TYPING
-========================= */
+.copy-button {
+    border: 0;
+    background: transparent;
+    color: #61758c;
 
-.typing {
+    cursor: pointer;
+    font-size: 9px;
+
+    padding: 3px 0;
+}
+
+.copy-button:hover {
+    color: var(--text);
+}
+
+/* Typing */
+
+.typing-row {
     display: none;
-
-    align-items: center;
-    gap: 12px;
-
     margin-bottom: 20px;
-
-    animation: messageIn .25s ease both;
 }
 
-.typing.show {
+.typing-row.show {
     display: flex;
 }
 
 .typing-bubble {
-    display: flex;
-    align-items: center;
-    gap: 5px;
-
     padding: 12px 15px;
 
     border: 1px solid var(--border);
-    border-radius: 15px;
+    background: rgba(255,255,255,.035);
 
-    background: rgba(255,255,255,0.035);
+    border-radius: 15px;
+    border-top-left-radius: 6px;
 }
 
-.typing-dot {
+.typing-dots {
+    display: flex;
+    gap: 4px;
+}
+
+.typing-dots span {
     width: 5px;
     height: 5px;
-
     border-radius: 50%;
-
     background: var(--muted);
 
-    animation: typingBounce 1.1s infinite;
+    animation: typing 1.1s infinite;
 }
 
-.typing-dot:nth-child(2) {
+.typing-dots span:nth-child(2) {
     animation-delay: .15s;
 }
 
-.typing-dot:nth-child(3) {
+.typing-dots span:nth-child(3) {
     animation-delay: .3s;
 }
 
-@keyframes typingBounce {
+@keyframes typing {
     0%,60%,100% {
+        opacity: .25;
         transform: translateY(0);
-        opacity: .45;
     }
 
     30% {
-        transform: translateY(-4px);
         opacity: 1;
+        transform: translateY(-3px);
     }
 }
 
 /* =========================
-   COMPOSER
+   INPUT
 ========================= */
 
-.composer-wrap {
-    position: absolute;
-
-    left: 0;
-    right: 0;
-    bottom: 0;
+.composer-area {
+    flex-shrink: 0;
 
     padding:
-        18px 20px
-        20px;
-
-    background:
-        linear-gradient(
-            to top,
-            rgba(6,16,28,0.98) 45%,
-            rgba(6,16,28,0)
-        );
-
-    pointer-events: none;
+        10px
+        max(24px, calc((100% - 900px) / 2))
+        18px;
 }
 
-.composer-inner {
-    width: min(900px, 100%);
-    margin: 0 auto;
-
-    pointer-events: auto;
-}
-
-/* PDF status */
-
-.pdf-status {
+.pdf-panel {
     display: none;
 
+    margin-bottom: 9px;
+
+    padding: 10px 12px;
+
+    border: 1px solid rgba(103,232,249,.13);
+    background: rgba(103,232,249,.045);
+
+    border-radius: 13px;
+
     align-items: center;
-    gap: 9px;
-
-    padding: 9px 12px;
-
-    margin-bottom: 8px;
-
-    border: 1px solid rgba(97,215,197,0.12);
-    border-radius: 12px;
-
-    background:
-        rgba(97,215,197,0.055);
-
-    color: #bceee7;
-
-    font-size: 10px;
+    justify-content: space-between;
+    gap: 10px;
 }
 
-.pdf-status.show {
+.pdf-panel.show {
     display: flex;
 }
 
-.pdf-status-text {
-    flex: 1;
+.pdf-info {
+    min-width: 0;
 }
 
-.pdf-remove {
+.pdf-name {
+    color: var(--accent);
+    font-size: 10px;
+    font-weight: 700;
+
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.pdf-status {
+    color: var(--muted);
+    font-size: 9px;
+    margin-top: 2px;
+}
+
+.remove-pdf {
     border: 0;
     background: transparent;
-
     color: var(--muted);
 
     cursor: pointer;
-    font-size: 15px;
 }
 
-.pdf-remove:hover {
+.remove-pdf:hover {
     color: var(--danger);
 }
 
-/* Composer */
-
 .composer {
+    position: relative;
+
     display: flex;
     align-items: flex-end;
-    gap: 8px;
+    gap: 7px;
 
     padding: 9px;
 
     border: 1px solid var(--border-light);
-    border-radius: 19px;
+    background: rgba(12,24,41,.85);
 
-    background:
-        rgba(10,24,40,0.86);
+    border-radius: 18px;
 
-    box-shadow:
-        0 20px 60px rgba(0,0,0,0.34);
+    box-shadow: var(--shadow);
 
-    backdrop-filter: blur(25px);
-
-    transition:
-        border-color .2s ease,
-        box-shadow .2s ease;
+    backdrop-filter: blur(20px);
 }
 
 .composer:focus-within {
-    border-color:
-        rgba(97,215,197,0.25);
-
+    border-color: rgba(103,232,249,.22);
     box-shadow:
-        0 20px 70px rgba(0,0,0,0.38),
-        0 0 0 3px rgba(97,215,197,0.035);
+        0 25px 80px rgba(0,0,0,.35),
+        0 0 0 3px rgba(103,232,249,.035);
 }
 
-.composer textarea {
-    flex: 1;
-
-    min-height: 42px;
-    max-height: 150px;
-
-    resize: none;
-
-    border: 0;
-    outline: 0;
-
-    padding: 10px 10px;
-
-    color: var(--text);
-
-    background: transparent;
-
-    font: inherit;
-    font-size: 13px;
-    line-height: 1.5;
-}
-
-.composer textarea::placeholder {
-    color: #667d95;
-}
-
-.composer-button {
+.attach-button,
+.send-button {
     flex-shrink: 0;
 
-    width: 40px;
-    height: 40px;
+    width: 39px;
+    height: 39px;
 
     display: flex;
     align-items: center;
     justify-content: center;
 
-    border: 1px solid var(--border);
     border-radius: 12px;
 
-    color: var(--muted);
-
-    background: rgba(255,255,255,0.035);
-
     cursor: pointer;
-
-    transition:
-        transform .2s ease,
-        color .2s ease,
-        background .2s ease;
 }
 
-.composer-button:hover {
-    transform: translateY(-2px);
+.attach-button {
+    border: 1px solid var(--border);
+    background: rgba(255,255,255,.035);
+    color: var(--muted);
+}
 
-    color: #dffff9;
-
-    background:
-        rgba(97,215,197,0.10);
+.attach-button:hover {
+    color: var(--text);
 }
 
 .send-button {
-    color: #07151c;
-
     border: 0;
+
+    color: #07111f;
 
     background:
         linear-gradient(
             135deg,
             var(--accent),
-            #72c8ff
+            var(--accent2)
         );
+
+    font-weight: 900;
+
+    transition: .2s ease;
 }
 
 .send-button:hover {
-    color: #07151c;
-
-    background:
-        linear-gradient(
-            135deg,
-            #7be1d0,
-            #83c3ff
-        );
-
-    box-shadow:
-        0 8px 25px rgba(97,215,197,0.18);
+    transform: translateY(-1px);
+    box-shadow: 0 7px 25px rgba(103,232,249,.18);
 }
 
-.mode-select {
-    flex-shrink: 0;
+.send-button:disabled {
+    opacity: .35;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+}
 
-    height: 40px;
+#messageInput {
+    flex: 1;
 
-    border: 1px solid var(--border);
-    border-radius: 11px;
+    min-height: 39px;
+    max-height: 160px;
 
-    padding: 0 10px;
+    resize: none;
 
+    border: 0;
     outline: none;
 
-    color: var(--muted);
+    background: transparent;
+    color: var(--text);
 
-    background: rgba(255,255,255,0.035);
+    font-family: inherit;
+    font-size: 13px;
 
-    font-size: 11px;
+    line-height: 1.5;
 
-    cursor: pointer;
+    padding: 9px 4px;
+
+    overflow-y: auto;
 }
 
-.mode-select option {
-    background: #0d1b2d;
-    color: white;
+#messageInput::placeholder {
+    color: #5e738c;
 }
 
-.helper {
+.input-hint {
     text-align: center;
 
-    margin-top: 8px;
-
-    color: #536b84;
-
+    color: #50647b;
     font-size: 9px;
+
+    margin-top: 8px;
 }
 
 /* =========================
@@ -1213,23 +1051,26 @@ body {
     position: fixed;
     inset: 0;
 
-    background: rgba(0,0,0,0.58);
+    background: rgba(0,0,0,.5);
 
-    z-index: 15;
+    z-index: 20;
 }
 
-@media (max-width: 850px) {
+@media (max-width: 760px) {
 
     .sidebar {
         position: fixed;
+        z-index: 30;
+
         left: 0;
         top: 0;
         bottom: 0;
 
         transform: translateX(-105%);
 
-        box-shadow:
-            20px 0 60px rgba(0,0,0,0.30);
+        width: 280px;
+
+        box-shadow: 20px 0 60px rgba(0,0,0,.4);
     }
 
     .sidebar.open {
@@ -1241,561 +1082,584 @@ body {
     }
 
     .mobile-menu {
-        display: block;
+        display: flex;
+        align-items: center;
+        justify-content: center;
     }
 
-    .topbar {
-        padding: 0 16px;
+    .header {
+        padding: 0 14px;
     }
 
-    .status-pill {
-        display: none;
-    }
-
-    .chat-area {
-        padding-left: 14px;
-        padding-right: 14px;
-    }
-
-    .composer-wrap {
-        padding:
-            12px 12px
-            15px;
-    }
-
-    .mode-cards {
-        grid-template-columns:
-            repeat(2, minmax(0,1fr));
-    }
-
-    .welcome {
-        min-height: 55vh;
-    }
-
-    .welcome h1 {
-        font-size: 30px;
-    }
-
-    .message-content {
-        max-width: 87%;
-    }
-
-    .mode-select {
-        max-width: 105px;
-    }
-}
-
-@media (max-width: 520px) {
-
-    .brand {
-        padding-bottom: 18px;
-    }
-
-    .topbar {
-        height: 62px;
+    .page-title {
+        font-size: 13px;
     }
 
     .page-subtitle {
         display: none;
     }
 
-    .chat-area {
-        padding-top: 20px;
-        padding-bottom: 150px;
+    .welcome {
+        padding: 30px 18px;
     }
 
-    .welcome-logo {
-        width: 62px;
-        height: 62px;
-        font-size: 27px;
+    .welcome h2 {
+        font-size: 25px;
+        text-align: center;
     }
 
-    .welcome h1 {
-        font-size: 27px;
+    .suggestions {
+        grid-template-columns: 1fr;
     }
 
-    .welcome p {
-        font-size: 12px;
+    .messages {
+        padding:
+            22px
+            15px;
     }
 
-    .mode-cards {
-        gap: 8px;
+    .message {
+        max-width: 92%;
     }
 
-    .mode-card {
-        padding: 12px 10px;
+    .message.user-message {
+        max-width: 88%;
     }
 
-    .composer {
-        border-radius: 16px;
+    .composer-area {
+        padding:
+            8px
+            12px
+            13px;
     }
 
-    .mode-select {
-        display: none;
+    .input-hint {
+        font-size: 8px;
     }
 
-    .composer-button {
-        width: 38px;
-        height: 38px;
+    .pdf-badge {
+        display: flex;
     }
 }
 
-</style>
+@media (max-width: 420px) {
 
+    .welcome-logo {
+        width: 65px;
+        height: 65px;
+    }
+
+    .welcome h2 {
+        font-size: 23px;
+    }
+
+    .header-right .icon-button {
+        width: 34px;
+        height: 34px;
+    }
+
+    .attach-button,
+    .send-button {
+        width: 37px;
+        height: 37px;
+    }
+}
+
+/* =========================
+   UPLOAD
+========================= */
+
+.file-input {
+    display: none;
+}
+
+/* Toast */
+
+.toast-container {
+    position: fixed;
+    right: 18px;
+    bottom: 18px;
+
+    z-index: 100;
+
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.toast {
+    max-width: 320px;
+
+    padding: 11px 14px;
+
+    border-radius: 12px;
+
+    border: 1px solid var(--border-light);
+    background: rgba(12,25,42,.95);
+
+    color: var(--text);
+
+    font-size: 11px;
+
+    box-shadow: var(--shadow);
+
+    animation: toastIn .25s ease;
+}
+
+@keyframes toastIn {
+    from {
+        opacity: 0;
+        transform: translateY(8px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.toast.error {
+    border-color: rgba(251,113,133,.25);
+}
+
+.toast.success {
+    border-color: rgba(74,222,128,.2);
+}
+
+</style>
 </head>
 
 <body>
 
-<div class="background-orb orb-one"></div>
-<div class="background-orb orb-two"></div>
+<div class="background">
+    <div class="orb one"></div>
+    <div class="orb two"></div>
+    <div class="orb three"></div>
+</div>
 
-<div class="overlay" id="overlay" onclick="closeSidebar()"></div>
+<div class="overlay" id="overlay"></div>
 
 <div class="app">
 
-```
-<!-- =========================
-     SIDEBAR
-========================== -->
+    <!-- =========================
+         SIDEBAR
+    ========================== -->
 
-<aside class="sidebar" id="sidebar">
+    <aside class="sidebar" id="sidebar">
 
-    <div class="brand">
+        <div class="brand">
 
-        <div class="brand-logo">
-            D
-        </div>
-
-        <div>
-            <div class="brand-title">
-                Dentora
+            <div class="brand-logo">
+                🦷
             </div>
 
-            <div class="brand-subtitle">
-                by Ehsan · BDS AI Tutor
+            <div class="brand-text">
+                <h1>Dentora</h1>
+                <span>by Ehsan</span>
             </div>
+
         </div>
 
-    </div>
-
-
-    <button
-        class="new-chat"
-        onclick="newChat()"
-    >
-        <span>＋</span>
-        New Chat
-    </button>
-
-
-    <div class="search-box">
-
-        <span class="search-icon">
-            ⌕
-        </span>
-
-        <input
-            id="searchChats"
-            type="text"
-            placeholder="Search chats..."
-            oninput="searchChats()"
+        <button
+            class="new-chat"
+            id="newChatButton"
+            type="button"
         >
+            <span>＋</span>
+            <span>New chat</span>
+        </button>
 
-    </div>
-
-
-    <div class="nav-label">
-        Workspace
-    </div>
-
-
-    <button
-        class="nav-item active"
-        onclick="setMode('Study Chat', this)"
-    >
-        <span class="nav-icon">✦</span>
-        Study Chat
-    </button>
-
-
-    <button
-        class="nav-item"
-        onclick="setMode('MCQ Mode', this)"
-    >
-        <span class="nav-icon">☑</span>
-        MCQ Mode
-    </button>
-
-
-    <button
-        class="nav-item"
-        onclick="setMode('Viva Mode', this)"
-    >
-        <span class="nav-icon">◉</span>
-        Viva Mode
-    </button>
-
-
-    <button
-        class="nav-item"
-        onclick="setMode('OSCE Mode', this)"
-    >
-        <span class="nav-icon">⊙</span>
-        OSCE Mode
-    </button>
-
-
-    <button
-        class="nav-item"
-        onclick="triggerPDFUpload()"
-    >
-        <span class="nav-icon">▱</span>
-        My PDFs
-    </button>
-
-
-    <div class="nav-label">
-        Recent Chats
-    </div>
-
-
-    <div
-        class="recent"
-        id="recentChats"
-    ></div>
-
-
-    <div class="sidebar-footer">
-
-        <div class="profile-card">
-
-            <div class="profile-avatar">
-                ES
-            </div>
-
-            <div>
-                <div class="profile-name">
-                    Ehsan Shaikh
-                </div>
-
-                <div class="profile-role">
-                    Final-Year BDS
-                </div>
-            </div>
-
+        <div class="section-title">
+            Study modes
         </div>
 
-    </div>
-
-</aside>
-
-
-<!-- =========================
-     MAIN
-========================== -->
-
-<main class="main">
-
-    <header class="topbar">
-
-        <div class="topbar-left">
+        <div class="mode-list">
 
             <button
-                class="mobile-menu"
-                onclick="openSidebar()"
+                class="mode active"
+                data-mode="study"
+                type="button"
             >
-                ☰
+                <div class="mode-icon">📚</div>
+
+                <div>
+                    <div class="mode-name">
+                        Study Chat
+                    </div>
+
+                    <div class="mode-description">
+                        Concepts & explanations
+                    </div>
+                </div>
             </button>
 
-            <div>
-
-                <div
-                    class="page-title"
-                    id="pageTitle"
-                >
-                    Study Chat
-                </div>
-
-                <div class="page-subtitle">
-                    Your BDS-focused AI study companion
-                </div>
-
-            </div>
-
-        </div>
-
-
-        <div class="status-pill">
-
-            <span class="status-dot"></span>
-
-            Dentora online
-
-        </div>
-
-    </header>
-
-
-    <!-- CHAT -->
-
-    <section
-        class="chat-area"
-        id="chatArea"
-    >
-
-        <div class="chat-inner">
-
-            <div
-                class="welcome"
-                id="welcome"
+            <button
+                class="mode"
+                data-mode="mcq"
+                type="button"
             >
+                <div class="mode-icon">🎯</div>
 
-                <div class="welcome-logo">
-                    🦷
-                </div>
-
-                <h1>
-                    Study smarter with Dentora.
-                </h1>
-
-                <p>
-                    Your BDS-focused AI tutor for concepts,
-                    MCQs, viva preparation, OSCEs and
-                    PDF-based revision.
-                </p>
-
-
-                <div class="mode-cards">
-
-                    <div
-                        class="mode-card"
-                        onclick="setMode('Study Chat')"
-                    >
-
-                        <div class="mode-card-icon">
-                            ✦
-                        </div>
-
-                        <div class="mode-card-title">
-                            Study
-                        </div>
-
-                        <div class="mode-card-text">
-                            Understand difficult dental concepts.
-                        </div>
-
-                    </div>
-
-
-                    <div
-                        class="mode-card"
-                        onclick="setMode('MCQ Mode')"
-                    >
-
-                        <div class="mode-card-icon">
-                            ☑
-                        </div>
-
-                        <div class="mode-card-title">
-                            MCQs
-                        </div>
-
-                        <div class="mode-card-text">
-                            Test yourself with exam-style questions.
-                        </div>
-
-                    </div>
-
-
-                    <div
-                        class="mode-card"
-                        onclick="setMode('Viva Mode')"
-                    >
-
-                        <div class="mode-card-icon">
-                            ◉
-                        </div>
-
-                        <div class="mode-card-title">
-                            Viva
-                        </div>
-
-                        <div class="mode-card-text">
-                            Practice concise viva-ready answers.
-                        </div>
-
-                    </div>
-
-
-                    <div
-                        class="mode-card"
-                        onclick="setMode('OSCE Mode')"
-                    >
-
-                        <div class="mode-card-icon">
-                            ⊙
-                        </div>
-
-                        <div class="mode-card-title">
-                            OSCE
-                        </div>
-
-                        <div class="mode-card-text">
-                            Prepare for clinical stations.
-                        </div>
-
-                    </div>
-
-                </div>
-
-            </div>
-
-
-            <div id="messages"></div>
-
-
-            <div
-                class="typing"
-                id="typing"
-            >
-
-                <div class="avatar">
-                    D
-                </div>
-
-                <div class="typing-bubble">
-
-                    <span class="typing-dot"></span>
-                    <span class="typing-dot"></span>
-                    <span class="typing-dot"></span>
-
-                </div>
-
-            </div>
-
-        </div>
-
-    </section>
-
-
-    <!-- COMPOSER -->
-
-    <div class="composer-wrap">
-
-        <div class="composer-inner">
-
-
-            <div
-                class="pdf-status"
-                id="pdfStatus"
-            >
-
-                <span>📄</span>
-
-                <div
-                    class="pdf-status-text"
-                    id="pdfStatusText"
-                ></div>
-
-                <button
-                    class="pdf-remove"
-                    onclick="removePDF()"
-                    title="Remove PDF"
-                >
-                    ×
-                </button>
-
-            </div>
-
-
-            <div class="composer">
-
-                <button
-                    class="composer-button"
-                    onclick="triggerPDFUpload()"
-                    title="Upload PDF"
-                >
-                    ＋
-                </button>
-
-
-                <textarea
-                    id="messageInput"
-                    rows="1"
-                    placeholder="Ask Dentora anything about dentistry..."
-                    onkeydown="handleKeyDown(event)"
-                    oninput="autoResize(this)"
-                ></textarea>
-
-
-                <select
-                    class="mode-select"
-                    id="modeSelect"
-                    onchange="modeChanged(this.value)"
-                >
-
-                    <option>
-                        Study Chat
-                    </option>
-
-                    <option>
+                <div>
+                    <div class="mode-name">
                         MCQ Mode
-                    </option>
+                    </div>
 
-                    <option>
+                    <div class="mode-description">
+                        Exam-style questions
+                    </div>
+                </div>
+            </button>
+
+            <button
+                class="mode"
+                data-mode="viva"
+                type="button"
+            >
+                <div class="mode-icon">🎤</div>
+
+                <div>
+                    <div class="mode-name">
                         Viva Mode
-                    </option>
+                    </div>
 
-                    <option>
+                    <div class="mode-description">
+                        Rapid oral revision
+                    </div>
+                </div>
+            </button>
+
+            <button
+                class="mode"
+                data-mode="osce"
+                type="button"
+            >
+                <div class="mode-icon">🩺</div>
+
+                <div>
+                    <div class="mode-name">
                         OSCE Mode
-                    </option>
+                    </div>
 
-                    <option>
+                    <div class="mode-description">
+                        Clinical stations
+                    </div>
+                </div>
+            </button>
+
+            <button
+                class="mode"
+                data-mode="pdf"
+                type="button"
+            >
+                <div class="mode-icon">📄</div>
+
+                <div>
+                    <div class="mode-name">
                         PDF Tutor
-                    </option>
+                    </div>
 
-                </select>
+                    <div class="mode-description">
+                        Ask questions from PDFs
+                    </div>
+                </div>
+            </button>
 
+        </div>
 
-                <button
-                    class="composer-button send-button"
-                    onclick="sendMessage()"
-                    title="Send"
-                >
-                    ➤
-                </button>
+        <div class="section-title">
+            Recent chats
+        </div>
 
-            </div>
+        <div
+            class="history"
+            id="history"
+        ></div>
 
+        <div class="sidebar-footer">
 
-            <div class="helper">
-                Enter to send · Shift + Enter for new line
+            <div class="status-pill">
+                <span class="status-dot"></span>
+                <span>AI service connected</span>
             </div>
 
         </div>
 
-    </div>
+    </aside>
 
-</main>
-```
+    <!-- =========================
+         MAIN
+    ========================== -->
+
+    <main class="main">
+
+        <header class="header">
+
+            <div class="header-left">
+
+                <button
+                    class="mobile-menu"
+                    id="mobileMenu"
+                    type="button"
+                    aria-label="Open menu"
+                >
+                    ☰
+                </button>
+
+                <div>
+
+                    <div
+                        class="page-title"
+                        id="pageTitle"
+                    >
+                        Study Chat
+                    </div>
+
+                    <div
+                        class="page-subtitle"
+                        id="pageSubtitle"
+                    >
+                        Your BDS study companion
+                    </div>
+
+                </div>
+
+            </div>
+
+            <div class="header-right">
+
+                <div
+                    class="pdf-badge"
+                    id="pdfBadge"
+                >
+                    📄 PDF loaded
+                </div>
+
+                <button
+                    class="icon-button"
+                    id="clearChatButton"
+                    title="Clear current chat"
+                    type="button"
+                >
+                    ✨
+                </button>
+
+            </div>
+
+        </header>
+
+        <!-- =========================
+             WELCOME
+        ========================== -->
+
+        <section
+            class="welcome"
+            id="welcome"
+        >
+
+            <div class="welcome-logo">
+                🦷
+            </div>
+
+            <h2>
+                Study smarter with
+                <span>Dentora</span>
+            </h2>
+
+            <p>
+                Your AI-powered BDS study companion for
+                concepts, MCQs, viva, OSCE preparation and
+                PDF-based revision.
+            </p>
+
+            <div class="suggestions">
+
+                <button
+                    class="suggestion"
+                    type="button"
+                    data-prompt="Explain the most important clinical points about trigeminal nerve lesions for a BDS exam."
+                >
+                    <div class="suggestion-title">
+                        🧠 Clinical concepts
+                    </div>
+
+                    <div class="suggestion-text">
+                        Explain a difficult topic step by step.
+                    </div>
+                </button>
+
+                <button
+                    class="suggestion"
+                    type="button"
+                    data-prompt="Give me one difficult BDS-level MCQ on oral pathology. Ask me one question at a time."
+                >
+                    <div class="suggestion-title">
+                        🎯 Practice MCQs
+                    </div>
+
+                    <div class="suggestion-text">
+                        Test your exam knowledge.
+                    </div>
+                </button>
+
+                <button
+                    class="suggestion"
+                    type="button"
+                    data-prompt="Start a rapid BDS viva session. Ask me one question at a time and wait for my answer."
+                >
+                    <div class="suggestion-title">
+                        🎤 Viva practice
+                    </div>
+
+                    <div class="suggestion-text">
+                        Practice short oral answers.
+                    </div>
+                </button>
+
+                <button
+                    class="suggestion"
+                    type="button"
+                    data-prompt="Start an OSCE station for a final-year BDS student. Give me the station instructions and ask me what I would do."
+                >
+                    <div class="suggestion-title">
+                        🩺 OSCE station
+                    </div>
+
+                    <div class="suggestion-text">
+                        Simulate clinical stations.
+                    </div>
+                </button>
+
+            </div>
+
+        </section>
+
+        <!-- =========================
+             CHAT
+        ========================== -->
+
+        <section
+            class="chat-container"
+            id="chatContainer"
+            style="display:none;"
+        >
+
+            <div
+                class="messages"
+                id="messages"
+            >
+
+                <div
+                    class="typing-row"
+                    id="typingRow"
+                >
+
+                    <div class="typing-bubble">
+
+                        <div class="typing-dots">
+                            <span></span>
+                            <span></span>
+                            <span></span>
+                        </div>
+
+                    </div>
+
+                </div>
+
+            </div>
+
+            <div class="composer-area">
+
+                <div
+                    class="pdf-panel"
+                    id="pdfPanel"
+                >
+
+                    <div class="pdf-info">
+
+                        <div
+                            class="pdf-name"
+                            id="pdfName"
+                        >
+                            PDF
+                        </div>
+
+                        <div
+                            class="pdf-status"
+                            id="pdfStatus"
+                        >
+                            Ready for questions
+                        </div>
+
+                    </div>
+
+                    <button
+                        class="remove-pdf"
+                        id="removePdf"
+                        type="button"
+                        title="Remove PDF"
+                    >
+                        ✕
+                    </button>
+
+                </div>
+
+                <div class="composer">
+
+                    <button
+                        class="attach-button"
+                        id="attachButton"
+                        type="button"
+                        title="Upload PDF"
+                    >
+                        📎
+                    </button>
+
+                    <input
+                        class="file-input"
+                        type="file"
+                        id="pdfInput"
+                        accept=".pdf,application/pdf"
+                    >
+
+                    <textarea
+                        id="messageInput"
+                        rows="1"
+                        placeholder="Ask Dentora anything about dentistry..."
+                    ></textarea>
+
+                    <button
+                        class="send-button"
+                        id="sendButton"
+                        type="button"
+                        title="Send"
+                    >
+                        ↑
+                    </button>
+
+                </div>
+
+                <div class="input-hint">
+                    Enter to send · Shift + Enter for a new line
+                </div>
+
+            </div>
+
+        </section>
+
+    </main>
 
 </div>
 
-<!-- Hidden PDF input -->
-
-<input
-type="file"
-id="pdfInput"
-accept="application/pdf"
-style="display:none"
-onchange="handlePDF(this)"
-
->
+<div
+    class="toast-container"
+    id="toastContainer"
+></div>
 
 <script>
 
 /* =========================================================
-   CONFIGURATION
+   DENTORA CONFIGURATION
 ========================================================= */
 
 const API_BASE =
@@ -1812,73 +1676,569 @@ const PDF_API =
    STATE
 ========================================================= */
 
-let currentMode = "Study Chat";
-
-let currentPDF = null;
+let currentMode = "study";
 
 let currentMessages = [];
 
+let currentChatId = null;
+
 let isSending = false;
+
+let uploadedPdf = null;
+
+let chatHistory = [];
 
 
 /* =========================================================
    DOM
 ========================================================= */
 
-const messagesEl =
-    document.getElementById("messages");
+const sidebar =
+    document.getElementById("sidebar");
 
-const welcomeEl =
+const overlay =
+    document.getElementById("overlay");
+
+const mobileMenu =
+    document.getElementById("mobileMenu");
+
+const welcome =
     document.getElementById("welcome");
 
-const chatArea =
-    document.getElementById("chatArea");
+const chatContainer =
+    document.getElementById("chatContainer");
+
+const messages =
+    document.getElementById("messages");
 
 const messageInput =
     document.getElementById("messageInput");
 
-const typingEl =
-    document.getElementById("typing");
+const sendButton =
+    document.getElementById("sendButton");
 
-const modeSelect =
-    document.getElementById("modeSelect");
+const attachButton =
+    document.getElementById("attachButton");
+
+const pdfInput =
+    document.getElementById("pdfInput");
+
+const pdfPanel =
+    document.getElementById("pdfPanel");
+
+const pdfName =
+    document.getElementById("pdfName");
 
 const pdfStatus =
     document.getElementById("pdfStatus");
 
-const pdfStatusText =
-    document.getElementById("pdfStatusText");
+const pdfBadge =
+    document.getElementById("pdfBadge");
+
+const typingRow =
+    document.getElementById("typingRow");
+
+const history =
+    document.getElementById("history");
+
+const pageTitle =
+    document.getElementById("pageTitle");
+
+const pageSubtitle =
+    document.getElementById("pageSubtitle");
+
+const toastContainer =
+    document.getElementById("toastContainer");
 
 
 /* =========================================================
-   SIDEBAR
+   MODE INFORMATION
 ========================================================= */
 
-function openSidebar() {
+const modeInfo = {
 
-    document
-        .getElementById("sidebar")
-        .classList
-        .add("open");
+    study: {
+        title: "Study Chat",
+        subtitle: "Your BDS study companion",
+        placeholder:
+            "Ask Dentora anything about dentistry..."
+    },
 
-    document
-        .getElementById("overlay")
-        .classList
-        .add("show");
+    mcq: {
+        title: "MCQ Mode",
+        subtitle: "Exam-focused BDS practice",
+        placeholder:
+            "Tell Dentora a topic or ask for an MCQ..."
+    },
+
+    viva: {
+        title: "Viva Mode",
+        subtitle: "Rapid oral examination practice",
+        placeholder:
+            "Start your viva topic..."
+    },
+
+    osce: {
+        title: "OSCE Mode",
+        subtitle: "Clinical station practice",
+        placeholder:
+            "Choose an OSCE topic..."
+    },
+
+    pdf: {
+        title: "PDF Tutor",
+        subtitle: "Study directly from your uploaded material",
+        placeholder:
+            "Ask a question about your PDF..."
+    }
+
+};
+
+
+/* =========================================================
+   LOCAL STORAGE
+========================================================= */
+
+function loadHistory() {
+
+    try {
+
+        const saved =
+            localStorage.getItem(
+                "dentora_chat_history"
+            );
+
+        if (!saved) {
+            chatHistory = [];
+            return;
+        }
+
+        const parsed =
+            JSON.parse(saved);
+
+        chatHistory =
+            Array.isArray(parsed)
+                ? parsed
+                : [];
+
+    } catch (error) {
+
+        console.error(
+            "History load error:",
+            error
+        );
+
+        chatHistory = [];
+
+    }
+
 }
 
 
-function closeSidebar() {
+function saveHistory() {
 
-    document
-        .getElementById("sidebar")
-        .classList
-        .remove("open");
+    try {
 
-    document
-        .getElementById("overlay")
-        .classList
-        .remove("show");
+        localStorage.setItem(
+            "dentora_chat_history",
+            JSON.stringify(chatHistory)
+        );
+
+    } catch (error) {
+
+        console.error(
+            "History save error:",
+            error
+        );
+
+    }
+
+}
+
+
+/* =========================================================
+   TOAST
+========================================================= */
+
+function showToast(
+    message,
+    type = "success"
+) {
+
+    const toast =
+        document.createElement("div");
+
+    toast.className =
+        "toast " + type;
+
+    toast.textContent =
+        message;
+
+    toastContainer.appendChild(toast);
+
+    setTimeout(() => {
+
+        toast.style.opacity = "0";
+        toast.style.transform =
+            "translateY(6px)";
+
+        setTimeout(() => {
+            toast.remove();
+        }, 250);
+
+    }, 3000);
+
+}
+
+
+/* =========================================================
+   MARKDOWN FORMATTER
+========================================================= */
+
+function escapeHtml(text) {
+
+    return String(text)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+
+}
+
+
+function formatAIText(text) {
+
+    let html =
+        escapeHtml(text);
+
+
+    /* Code blocks */
+
+    html =
+        html.replace(
+            /```([\s\S]*?)```/g,
+            function(_, code) {
+
+                return (
+                    "<pre><code>" +
+                    code.trim() +
+                    "</code></pre>"
+                );
+
+            }
+        );
+
+
+    /* Inline code */
+
+    html =
+        html.replace(
+            /`([^`]+)`/g,
+            "<code>$1</code>"
+        );
+
+
+    /* Bold */
+
+    html =
+        html.replace(
+            /\*\*(.*?)\*\*/g,
+            "<strong>$1</strong>"
+        );
+
+
+    /* Headings */
+
+    html =
+        html.replace(
+            /^### (.*)$/gm,
+            "<strong>$1</strong>"
+        );
+
+    html =
+        html.replace(
+            /^## (.*)$/gm,
+            "<strong>$1</strong>"
+        );
+
+    html =
+        html.replace(
+            /^# (.*)$/gm,
+            "<strong>$1</strong>"
+        );
+
+
+    /* Bullets */
+
+    html =
+        html.replace(
+            /^[•\-] (.*)$/gm,
+            "• $1"
+        );
+
+
+    /* New lines */
+
+    html =
+        html.replace(
+            /\n/g,
+            "<br>"
+        );
+
+
+    return html;
+
+}
+
+
+/* =========================================================
+   CHAT UI
+========================================================= */
+
+function showChatInterface() {
+
+    welcome.style.display = "none";
+
+    chatContainer.style.display =
+        "flex";
+
+}
+
+
+function showWelcomeInterface() {
+
+    welcome.style.display =
+        "flex";
+
+    chatContainer.style.display =
+        "none";
+
+}
+
+
+function clearMessagesUI() {
+
+    messages.innerHTML = "";
+
+    messages.appendChild(
+        typingRow
+    );
+
+}
+
+
+function addMessage(
+    text,
+    role,
+    provider = null,
+    save = true
+) {
+
+    showChatInterface();
+
+    const row =
+        document.createElement("div");
+
+    row.className =
+        "message-row " +
+        (role === "user"
+            ? "user"
+            : "assistant");
+
+
+    const wrapper =
+        document.createElement("div");
+
+    wrapper.className =
+        "message " +
+        (
+            role === "user"
+                ? "user-message"
+                : "ai-message"
+        );
+
+
+    const bubble =
+        document.createElement("div");
+
+    bubble.className =
+        "message-bubble";
+
+
+    if (role === "assistant") {
+
+        bubble.innerHTML =
+            formatAIText(text);
+
+    } else {
+
+        bubble.textContent =
+            text;
+
+    }
+
+
+    wrapper.appendChild(
+        bubble
+    );
+
+
+    const meta =
+        document.createElement("div");
+
+    meta.className =
+        "message-meta";
+
+
+    if (role === "assistant") {
+
+        meta.innerHTML =
+            provider
+                ? `Dentora · <span class="provider">${escapeHtml(provider)}</span>`
+                : "Dentora";
+
+    } else {
+
+        meta.textContent =
+            "You";
+
+    }
+
+
+    wrapper.appendChild(
+        meta
+    );
+
+
+    if (role === "assistant") {
+
+        const actions =
+            document.createElement("div");
+
+        actions.className =
+            "message-actions";
+
+
+        const copy =
+            document.createElement("button");
+
+        copy.className =
+            "copy-button";
+
+        copy.type =
+            "button";
+
+        copy.textContent =
+            "Copy answer";
+
+
+        copy.addEventListener(
+            "click",
+            async function() {
+
+                try {
+
+                    await navigator.clipboard.writeText(
+                        text
+                    );
+
+                    copy.textContent =
+                        "Copied ✓";
+
+                    setTimeout(() => {
+                        copy.textContent =
+                            "Copy answer";
+                    }, 1500);
+
+                } catch {
+
+                    showToast(
+                        "Copy failed.",
+                        "error"
+                    );
+
+                }
+
+            }
+        );
+
+
+        actions.appendChild(
+            copy
+        );
+
+        wrapper.appendChild(
+            actions
+        );
+
+    }
+
+
+    row.appendChild(
+        wrapper
+    );
+
+
+    messages.insertBefore(
+        row,
+        typingRow
+    );
+
+
+    scrollToBottom();
+
+
+    if (save) {
+
+        currentMessages.push({
+            role:
+                role === "user"
+                    ? "user"
+                    : "assistant",
+
+            content:
+                text
+        });
+
+    }
+
+}
+
+
+function scrollToBottom() {
+
+    requestAnimationFrame(() => {
+
+        messages.scrollTop =
+            messages.scrollHeight;
+
+    });
+
+}
+
+
+/* =========================================================
+   TYPING
+========================================================= */
+
+function showTyping() {
+
+    typingRow.classList.add(
+        "show"
+    );
+
+    scrollToBottom();
+
+}
+
+
+function hideTyping() {
+
+    typingRow.classList.remove(
+        "show"
+    );
+
 }
 
 
@@ -1886,77 +2246,53 @@ function closeSidebar() {
    MODE
 ========================================================= */
 
-function setMode(
-    mode,
-    clickedElement = null
-) {
+function setMode(mode) {
 
-    currentMode = mode;
-
-    if (mode === "PDF Tutor") {
-
-        modeSelect.value =
-            "PDF Tutor";
-
-    } else {
-
-        modeSelect.value =
-            mode;
+    if (!modeInfo[mode]) {
+        mode = "study";
     }
 
+    currentMode =
+        mode;
 
     document
-        .getElementById("pageTitle")
-        .textContent = mode;
+        .querySelectorAll(".mode")
+        .forEach(button => {
 
-
-    document
-        .querySelectorAll(".nav-item")
-        .forEach(item => {
-
-            item.classList.remove("active");
+            button.classList.toggle(
+                "active",
+                button.dataset.mode === mode
+            );
 
         });
 
 
-    if (clickedElement) {
+    pageTitle.textContent =
+        modeInfo[mode].title;
 
-        clickedElement.classList.add("active");
+    pageSubtitle.textContent =
+        modeInfo[mode].subtitle;
 
-    } else {
+    messageInput.placeholder =
+        modeInfo[mode].placeholder;
 
-        document
-            .querySelectorAll(".nav-item")
-            .forEach(item => {
 
-                if (
-                    item.textContent
-                        .trim()
-                        .includes(mode.replace(" Mode",""))
-                ) {
+    if (mode === "pdf") {
 
-                    item.classList.add("active");
+        if (uploadedPdf) {
 
-                }
+            showPdfPanel();
 
-            });
+        } else {
+
+            showToast(
+                "Upload a PDF to use PDF Tutor.",
+                "success"
+            );
+
+        }
 
     }
-
-
-    closeSidebar();
-
-    messageInput.focus();
-}
-
-
-function modeChanged(mode) {
-
-    currentMode = mode;
-
-    document
-        .getElementById("pageTitle")
-        .textContent = mode;
 
 }
 
@@ -1967,38 +2303,304 @@ function modeChanged(mode) {
 
 function newChat() {
 
+    currentChatId =
+        Date.now().toString();
+
     currentMessages = [];
 
-    messagesEl.innerHTML = "";
+    clearMessagesUI();
 
-    welcomeEl.style.display = "";
-
-    currentPDF = null;
-
-    hidePDFStatus();
+    showWelcomeInterface();
 
     messageInput.value = "";
 
     autoResize(messageInput);
 
-    currentMode = "Study Chat";
-
-    modeSelect.value =
-        "Study Chat";
-
-    document
-        .getElementById("pageTitle")
-        .textContent = "Study Chat";
-
-    closeSidebar();
-
-    messageInput.focus();
+    closeMobileMenu();
 
 }
 
 
 /* =========================================================
-   TEXTAREA
+   SAVE CURRENT CHAT
+========================================================= */
+
+function saveCurrentChat() {
+
+    if (
+        currentMessages.length === 0
+    ) {
+        return;
+    }
+
+
+    const firstUserMessage =
+        currentMessages.find(
+            item =>
+                item.role === "user"
+        );
+
+
+    let title =
+        firstUserMessage
+            ? firstUserMessage.content
+            : "New conversation";
+
+
+    title =
+        title
+            .replace(/\s+/g, " ")
+            .trim()
+            .slice(0, 45);
+
+
+    const existingIndex =
+        chatHistory.findIndex(
+            chat =>
+                chat.id === currentChatId
+        );
+
+
+    const chat = {
+
+        id:
+            currentChatId,
+
+        title:
+            title || "New conversation",
+
+        mode:
+            currentMode,
+
+        messages:
+            currentMessages,
+
+        updatedAt:
+            Date.now()
+
+    };
+
+
+    if (existingIndex >= 0) {
+
+        chatHistory[
+            existingIndex
+        ] = chat;
+
+    } else {
+
+        chatHistory.unshift(
+            chat
+        );
+
+    }
+
+
+    chatHistory =
+        chatHistory
+            .sort(
+                (a,b) =>
+                    b.updatedAt -
+                    a.updatedAt
+            )
+            .slice(0, 30);
+
+
+    saveHistory();
+
+    renderHistory();
+
+}
+
+
+/* =========================================================
+   LOAD CHAT
+========================================================= */
+
+function loadChat(id) {
+
+    const chat =
+        chatHistory.find(
+            item =>
+                item.id === id
+        );
+
+    if (!chat) {
+        return;
+    }
+
+
+    currentChatId =
+        chat.id;
+
+    currentMode =
+        chat.mode || "study";
+
+    currentMessages =
+        Array.isArray(chat.messages)
+            ? chat.messages.slice()
+            : [];
+
+
+    setMode(
+        currentMode
+    );
+
+    clearMessagesUI();
+
+
+    currentMessages.forEach(
+        message => {
+
+            addMessage(
+                message.content,
+                message.role,
+                null,
+                false
+            );
+
+        }
+    );
+
+
+    if (
+        currentMessages.length === 0
+    ) {
+
+        showWelcomeInterface();
+
+    } else {
+
+        showChatInterface();
+
+    }
+
+
+    renderHistory();
+
+    closeMobileMenu();
+
+}
+
+
+/* =========================================================
+   RENDER HISTORY
+========================================================= */
+
+function renderHistory() {
+
+    history.innerHTML = "";
+
+
+    if (
+        chatHistory.length === 0
+    ) {
+
+        const empty =
+            document.createElement("div");
+
+        empty.className =
+            "empty-history";
+
+        empty.textContent =
+            "Your recent chats will appear here.";
+
+        history.appendChild(
+            empty
+        );
+
+        return;
+
+    }
+
+
+    chatHistory.forEach(
+        chat => {
+
+            const item =
+                document.createElement("button");
+
+            item.type =
+                "button";
+
+            item.className =
+                "chat-item " +
+                (
+                    chat.id === currentChatId
+                        ? "active"
+                        : ""
+                );
+
+
+            const icon =
+                document.createElement("span");
+
+            icon.textContent =
+                chat.mode === "mcq"
+                    ? "🎯"
+                    : chat.mode === "viva"
+                        ? "🎤"
+                        : chat.mode === "osce"
+                            ? "🩺"
+                            : chat.mode === "pdf"
+                                ? "📄"
+                                : "💬";
+
+
+            const title =
+                document.createElement("span");
+
+            title.className =
+                "chat-title";
+
+            title.textContent =
+                chat.title;
+
+
+            item.appendChild(
+                icon
+            );
+
+            item.appendChild(
+                title
+            );
+
+
+            item.addEventListener(
+                "click",
+                () => loadChat(chat.id)
+            );
+
+
+            history.appendChild(
+                item
+            );
+
+        }
+    );
+
+}
+
+
+/* =========================================================
+   CLEAR CURRENT CHAT
+========================================================= */
+
+function clearCurrentChat() {
+
+    currentMessages = [];
+
+    clearMessagesUI();
+
+    showWelcomeInterface();
+
+    saveHistory();
+
+}
+
+
+/* =========================================================
+   INPUT RESIZE
 ========================================================= */
 
 function autoResize(
@@ -2011,21 +2613,11 @@ function autoResize(
     textarea.style.height =
         Math.min(
             textarea.scrollHeight,
-            150
+            160
         ) + "px";
-}
-function handleKeyDown(event) {
-
-    if (event.key === "Enter" && !event.shiftKey) {
-
-        event.preventDefault();
-        event.stopPropagation();
-
-        sendMessage();
-
-    }
 
 }
+
 
 /* =========================================================
    SEND MESSAGE
@@ -2049,22 +2641,34 @@ async function sendMessage() {
 
     isSending = true;
 
+    sendButton.disabled =
+        true;
+
+
+    showChatInterface();
+
+
+    if (!currentChatId) {
+
+        currentChatId =
+            Date.now().toString();
+
+    }
+
+
+    messageInput.value =
+        "";
+
+    autoResize(
+        messageInput
+    );
+
 
     addMessage(
         message,
         "user"
     );
 
-
-    currentMessages.push({
-        role: "user",
-        content: message
-    });
-
-
-    messageInput.value = "";
-
-    autoResize(messageInput);
 
     showTyping();
 
@@ -2075,18 +2679,24 @@ async function sendMessage() {
             await fetch(
                 CHAT_API,
                 {
-                    method: "POST",
+                    method:
+                        "POST",
 
                     headers: {
                         "Content-Type":
                             "application/json"
                     },
 
-                    body: JSON.stringify({
-                        message: message,
-                        mode:
-                            currentMode
-                    })
+                    body:
+                        JSON.stringify({
+
+                            message:
+                                message,
+
+                            mode:
+                                currentMode
+
+                        })
                 }
             );
 
@@ -2113,32 +2723,27 @@ async function sendMessage() {
 
         /*
             IMPORTANT:
-
-            The current Render backend returns:
+            Your FastAPI backend returns:
 
             {
                 "reply": "...",
                 "provider": "..."
             }
 
-            Older versions returned:
-
-            {
-                "response": "...",
-                "provider": "..."
-            }
-
-            We support BOTH.
+            We support both reply and response
+            so an older backend won't break
+            the frontend.
         */
 
         const aiReply =
             typeof data.reply === "string"
                 ? data.reply
-                : data.response;
+                : typeof data.response === "string"
+                    ? data.response
+                    : "";
 
 
         if (
-            typeof aiReply !== "string" ||
             !aiReply.trim()
         ) {
 
@@ -2154,17 +2759,14 @@ async function sendMessage() {
         }
 
 
+        hideTyping();
+
+
         addMessage(
             aiReply,
-            "ai",
-            data.provider
+            "assistant",
+            data.provider || null
         );
-
-
-        currentMessages.push({
-            role: "assistant",
-            content: aiReply
-        });
 
 
         saveCurrentChat();
@@ -2173,21 +2775,72 @@ async function sendMessage() {
     } catch (error) {
 
         console.error(
-            "Chat error:",
+            "Dentora chat error:",
             error
         );
 
 
+        hideTyping();
+
+
+        let errorMessage =
+            "Dentora couldn't connect to the AI service.";
+
+
+        if (
+            error.message &&
+            error.message.includes(
+                "Failed to fetch"
+            )
+        ) {
+
+            errorMessage =
+                "The AI server is waking up. Please wait a few seconds and try again.";
+
+        } else if (
+            error.message &&
+            error.message.includes(
+                "HTTP 429"
+            )
+        ) {
+
+            errorMessage =
+                "The AI service is temporarily rate-limited. Please try again shortly.";
+
+        } else if (
+            error.message &&
+            error.message.includes(
+                "HTTP 500"
+            )
+        ) {
+
+            errorMessage =
+                "The AI server encountered an error. Please try again.";
+
+        }
+
+
         addMessage(
-            "Dentora couldn't connect to the AI service. Please try again.",
-            "ai"
+            errorMessage,
+            "assistant"
         );
+
+
+        showToast(
+            errorMessage,
+            "error"
+        );
+
 
     } finally {
 
-        hideTyping();
+        isSending =
+            false;
 
-        isSending = false;
+        sendButton.disabled =
+            false;
+
+        messageInput.focus();
 
     }
 
@@ -2195,654 +2848,388 @@ async function sendMessage() {
 
 
 /* =========================================================
-   ADD MESSAGE
+   ENTER KEY — IMPORTANT FIX
 ========================================================= */
 
-function addMessage(
-    text,
-    sender,
-    provider = ""
-) {
+/*
+    We intentionally use addEventListener here.
 
-    welcomeEl.style.display =
-        "none";
+    Enter:
+        SEND
 
+    Shift + Enter:
+        NEW LINE
 
-    const wrapper =
-        document.createElement("div");
+    This avoids relying on inline HTML
+    onkeydown handlers.
+*/
 
+messageInput.addEventListener(
+    "keydown",
+    function(event) {
 
-    wrapper.className =
-        "message " + sender;
+        if (
+            event.key === "Enter" &&
+            !event.shiftKey
+        ) {
 
+            event.preventDefault();
 
-    const avatar =
-        document.createElement("div");
+            event.stopPropagation();
 
-
-    avatar.className =
-        "avatar";
-
-
-    avatar.textContent =
-        sender === "ai"
-            ? "D"
-            : "ES";
-
-
-    const content =
-        document.createElement("div");
-
-
-    content.className =
-        "message-content";
-
-
-    const bubble =
-        document.createElement("div");
-
-
-    bubble.className =
-        "message-bubble";
-
-
-    if (sender === "ai") {
-
-        bubble.innerHTML =
-            formatAIText(text);
-
-    } else {
-
-        bubble.textContent =
-            text;
-
-    }
-
-
-    content.appendChild(
-        bubble
-    );
-
-
-    if (sender === "ai") {
-
-        const meta =
-            document.createElement("div");
-
-        meta.className =
-            "message-meta";
-
-
-        if (provider) {
-
-            meta.innerHTML =
-                `<span class="provider-label">
-                    Powered by ${escapeHTML(provider)}
-                 </span>`;
-
-        } else {
-
-            meta.textContent =
-                "Dentora";
+            sendMessage();
 
         }
 
-        content.appendChild(meta);
+    }
+);
+
+
+/* =========================================================
+   INPUT
+========================================================= */
+
+messageInput.addEventListener(
+    "input",
+    function() {
+
+        autoResize(
+            messageInput
+        );
 
     }
-
-
-    wrapper.appendChild(
-        avatar
-    );
-
-    wrapper.appendChild(
-        content
-    );
-
-
-    messagesEl.appendChild(
-        wrapper
-    );
-
-
-    scrollToBottom();
-
-}
-
-
-/* =========================================================
-   MARKDOWN-LIKE FORMATTER
-========================================================= */
-
-function formatAIText(
-    text
-) {
-
-    let html =
-        escapeHTML(text);
-
-
-    html =
-        html.replace(
-            /```([\s\S]*?)```/g,
-            "<pre><code>$1</code></pre>"
-
-```
-    );
-
-
-html =
-    html.replace(
-        /^### (.*)$/gm,
-        "<h3>$1</h3>"
-    );
-
-
-html =
-    html.replace(
-        /^## (.*)$/gm,
-        "<h2>$1</h2>"
-    );
-
-
-html =
-    html.replace(
-        /^# (.*)$/gm,
-        "<h1>$1</h1>"
-    );
-
-
-html =
-    html.replace(
-        /\*\*(.*?)\*\*/g,
-        "<strong>$1</strong>"
-    );
-
-
-html =
-    html.replace(
-        /\*(.*?)\*/g,
-        "<em>$1</em>"
-    );
-
-
-html =
-    html.replace(
-        /`([^`]+)`/g,
-        "<code>$1</code>"
-    );
-
-
-html =
-    html.replace(
-        /^[-•] (.*)$/gm,
-        "• $1"
-    );
-
-
-html =
-    html.replace(
-        /\n/g,
-        "<br>"
-    );
-
-
-return html;
-```
-
-}
-
-function escapeHTML(
-value
-) {
-
-```
-const div =
-    document.createElement("div");
-
-div.textContent =
-    value;
-
-return div.innerHTML;
-```
-
-}
-
-/* =========================================================
-TYPING
-========================================================= */
-
-function showTyping() {
-
-```
-typingEl.classList.add(
-    "show"
 );
 
-scrollToBottom();
-```
 
-}
+/* =========================================================
+   SEND BUTTON
+========================================================= */
 
-function hideTyping() {
+sendButton.addEventListener(
+    "click",
+    function() {
 
-```
-typingEl.classList.remove(
-    "show"
+        sendMessage();
+
+    }
 );
-```
 
-}
 
 /* =========================================================
-SCROLL
+   SUGGESTIONS
 ========================================================= */
 
-function scrollToBottom() {
-
-```
-setTimeout(() => {
-
-    chatArea.scrollTo({
-        top:
-            chatArea.scrollHeight,
-        behavior:
-            "smooth"
-    });
-
-}, 40);
-```
-
-}
-
-/* =========================================================
-PDF
-========================================================= */
-
-function triggerPDFUpload() {
-
-```
 document
-    .getElementById("pdfInput")
-    .click();
-```
+    .querySelectorAll(".suggestion")
+    .forEach(button => {
 
-}
+        button.addEventListener(
+            "click",
+            function() {
 
-async function handlePDF(input) {
+                const prompt =
+                    button.dataset.prompt;
 
-```
-const file =
-    input.files[0];
+                messageInput.value =
+                    prompt;
 
+                autoResize(
+                    messageInput
+                );
 
-if (!file) {
-    return;
-}
+                messageInput.focus();
 
-
-if (
-    file.type !==
-    "application/pdf"
-) {
-
-    alert(
-        "Please select a PDF file."
-    );
-
-    input.value = "";
-
-    return;
-}
-
-
-showPDFUploading(
-    file.name
-);
-
-
-try {
-
-    const formData =
-        new FormData();
-
-
-    formData.append(
-        "file",
-        file
-    );
-
-
-    const response =
-        await fetch(
-            PDF_API,
-            {
-                method: "POST",
-                body: formData
             }
         );
 
+    });
 
-    if (!response.ok) {
-
-        throw new Error(
-            "PDF upload failed: HTTP " +
-            response.status
-        );
-
-    }
-
-
-    const data =
-        await response.json();
-
-
-    if (!data.success) {
-
-        throw new Error(
-            data.message ||
-            "PDF upload failed."
-        );
-
-    }
-
-
-    currentPDF = {
-
-        name:
-            data.filename,
-
-        pages:
-            data.pages,
-
-        characters:
-            data.text
-                ? data.text.length
-                : 0
-
-    };
-
-
-    showPDFStatus(
-        currentPDF
-    );
-
-
-    setMode(
-        "PDF Tutor"
-    );
-
-
-    messageInput.placeholder =
-        "Ask questions about your PDF...";
-
-
-} catch (error) {
-
-    console.error(
-        "PDF error:",
-        error
-    );
-
-
-    hidePDFStatus();
-
-
-    alert(
-        "Could not upload PDF.\n\n" +
-        error.message
-    );
-
-}
-
-
-input.value = "";
-```
-
-}
-
-function showPDFUploading(
-name
-) {
-
-```
-pdfStatus.classList.add(
-    "show"
-);
-
-
-pdfStatusText.textContent =
-    "Uploading " +
-    name +
-    "...";
-```
-
-}
-
-function showPDFStatus(
-pdf
-) {
-
-```
-pdfStatus.classList.add(
-    "show"
-);
-
-
-pdfStatusText.innerHTML =
-    `<strong>${escapeHTML(pdf.name)}</strong>
-     · ${pdf.pages} pages
-     · ${pdf.characters.toLocaleString()} characters
-     · <span style="color:#73d7ca">PDF Ready</span>`;
-```
-
-}
-
-function hidePDFStatus() {
-
-```
-pdfStatus.classList.remove(
-    "show"
-);
-
-pdfStatusText.textContent =
-    "";
-```
-
-}
-
-function removePDF() {
-
-```
-currentPDF = null;
-
-hidePDFStatus();
-
-modeSelect.value =
-    "Study Chat";
-
-currentMode =
-    "Study Chat";
-
-document
-    .getElementById("pageTitle")
-    .textContent =
-        "Study Chat";
-
-messageInput.placeholder =
-    "Ask Dentora anything about dentistry...";
-```
-
-}
 
 /* =========================================================
-CHAT HISTORY
+   MODE BUTTONS
 ========================================================= */
 
-function saveCurrentChat() {
+document
+    .querySelectorAll(".mode")
+    .forEach(button => {
 
-```
-if (
-    currentMessages.length === 0
-) {
-    return;
-}
+        button.addEventListener(
+            "click",
+            function() {
 
+                setMode(
+                    button.dataset.mode
+                );
 
-let chats =
-    JSON.parse(
-        localStorage.getItem(
-            "dentora_chats"
-        ) || "[]"
-    );
-
-
-const firstUserMessage =
-    currentMessages.find(
-        item =>
-            item.role === "user"
-    );
-
-
-const title =
-    firstUserMessage
-        ? firstUserMessage.content
-        : "New Dentora Chat";
-
-
-const chat = {
-
-    id:
-        Date.now(),
-
-    title:
-        title.substring(0, 70),
-
-    messages:
-        currentMessages,
-
-    updated:
-        new Date().toISOString()
-
-};
-
-
-chats.unshift(chat);
-
-
-chats =
-    chats.slice(0, 30);
-
-
-localStorage.setItem(
-    "dentora_chats",
-    JSON.stringify(chats)
-);
-
-
-renderRecentChats();
-```
-
-}
-
-function renderRecentChats(
-filter = ""
-) {
-
-```
-const container =
-    document.getElementById(
-        "recentChats"
-    );
-
-
-const chats =
-    JSON.parse(
-        localStorage.getItem(
-            "dentora_chats"
-        ) || "[]"
-    );
-
-
-container.innerHTML = "";
-
-
-chats
-    .filter(chat =>
-        chat.title
-            .toLowerCase()
-            .includes(
-                filter.toLowerCase()
-            )
-    )
-    .slice(0, 15)
-    .forEach(chat => {
-
-        const item =
-            document.createElement(
-                "div"
-            );
-
-
-        item.className =
-            "recent-chat";
-
-
-        item.textContent =
-            chat.title;
-
-
-        item.title =
-            chat.title;
-
-
-        item.onclick =
-            () => loadChat(chat);
-
-
-        container.appendChild(
-            item
+            }
         );
 
     });
-```
+
+
+/* =========================================================
+   NEW CHAT
+========================================================= */
+
+document
+    .getElementById("newChatButton")
+    .addEventListener(
+        "click",
+        newChat
+    );
+
+
+/* =========================================================
+   CLEAR CHAT
+========================================================= */
+
+document
+    .getElementById("clearChatButton")
+    .addEventListener(
+        "click",
+        function() {
+
+            if (
+                currentMessages.length === 0
+            ) {
+
+                showToast(
+                    "This chat is already empty."
+                );
+
+                return;
+
+            }
+
+
+            clearCurrentChat();
+
+
+            showToast(
+                "Chat cleared."
+            );
+
+        }
+    );
+
+
+/* =========================================================
+   MOBILE MENU
+========================================================= */
+
+function openMobileMenu() {
+
+    sidebar.classList.add(
+        "open"
+    );
+
+    overlay.classList.add(
+        "show"
+    );
 
 }
 
-function loadChat(
-chat
-) {
 
-```
-currentMessages =
-    chat.messages || [];
+function closeMobileMenu() {
+
+    sidebar.classList.remove(
+        "open"
+    );
+
+    overlay.classList.remove(
+        "show"
+    );
+
+}
 
 
-messagesEl.innerHTML = "";
+mobileMenu.addEventListener(
+    "click",
+    openMobileMenu
+);
 
-welcomeEl.style.display =
-    "none";
+
+overlay.addEventListener(
+    "click",
+    closeMobileMenu
+);
 
 
-currentMessages.forEach(
-    message => {
+/* =========================================================
+   PDF UPLOAD
+========================================================= */
+
+attachButton.addEventListener(
+    "click",
+    function() {
+
+        pdfInput.click();
+
+    }
+);
+
+
+pdfInput.addEventListener(
+    "change",
+    async function() {
+
+        const file =
+            pdfInput.files[0];
+
+
+        if (!file) {
+            return;
+        }
+
 
         if (
-            message.role ===
-            "user"
+            file.type !==
+                "application/pdf" &&
+            !file.name
+                .toLowerCase()
+                .endsWith(".pdf")
         ) {
 
-            addMessage(
-                message.content,
-                "user"
+            showToast(
+                "Please select a PDF file.",
+                "error"
             );
 
-        } else {
+            pdfInput.value =
+                "";
 
-            addMessage(
-                message.content,
-                "ai"
+            return;
+
+        }
+
+
+        if (
+            file.size >
+            25 * 1024 * 1024
+        ) {
+
+            showToast(
+                "PDF is too large. Maximum size is 25 MB.",
+                "error"
+            );
+
+            pdfInput.value =
+                "";
+
+            return;
+
+        }
+
+
+        pdfStatus.textContent =
+            "Uploading and processing…";
+
+
+        pdfName.textContent =
+            file.name;
+
+
+        pdfPanel.classList.add(
+            "show"
+        );
+
+
+        pdfBadge.style.display =
+            "flex";
+
+
+        try {
+
+            const formData =
+                new FormData();
+
+
+            formData.append(
+                "file",
+                file
+            );
+
+
+            const response =
+                await fetch(
+                    PDF_API,
+                    {
+                        method:
+                            "POST",
+
+                        body:
+                            formData
+                    }
+                );
+
+
+            if (!response.ok) {
+
+                throw new Error(
+                    "PDF upload failed: HTTP " +
+                    response.status
+                );
+
+            }
+
+
+            const data =
+                await response.json();
+
+
+            console.log(
+                "PDF upload response:",
+                data
+            );
+
+
+            uploadedPdf = {
+
+                name:
+                    file.name,
+
+                data:
+                    data
+
+            };
+
+
+            pdfStatus.textContent =
+                "PDF processed. Ask Dentora questions from it.";
+
+
+            setMode("pdf");
+
+
+            showToast(
+                "PDF uploaded successfully."
+            );
+
+
+        } catch (error) {
+
+            console.error(
+                "PDF upload error:",
+                error
+            );
+
+
+            uploadedPdf =
+                null;
+
+
+            pdfPanel.classList.remove(
+                "show"
+            );
+
+
+            pdfBadge.style.display =
+                "none";
+
+
+            showToast(
+                "PDF upload failed. Please try again.",
+                "error"
             );
 
         }
@@ -2851,82 +3238,132 @@ currentMessages.forEach(
 );
 
 
-closeSidebar();
-```
-
-}
-
-function searchChats() {
-
-```
-const value =
-    document
-        .getElementById(
-            "searchChats"
-        )
-        .value;
-
-
-renderRecentChats(
-    value
-);
-```
-
-}
-
 /* =========================================================
-INITIALIZATION
+   REMOVE PDF
 ========================================================= */
 
-renderRecentChats();
+document
+    .getElementById("removePdf")
+    .addEventListener(
+        "click",
+        function() {
 
-messageInput.focus();
+            uploadedPdf =
+                null;
 
-/*
-Small animated welcome effect.
-*/
+            pdfInput.value =
+                "";
 
-setTimeout(() => {
+            pdfPanel.classList.remove(
+                "show"
+            );
 
-```
-const cards =
-    document.querySelectorAll(
-        ".mode-card"
+            pdfBadge.style.display =
+                "none";
+
+            showToast(
+                "PDF removed."
+            );
+
+        }
     );
 
-cards.forEach(
-    (card, index) => {
 
-        card.style.animation =
-            `messageIn .45s ease ${index * 0.08}s both`;
+function showPdfPanel() {
+
+    if (!uploadedPdf) {
+        return;
+    }
+
+    pdfName.textContent =
+        uploadedPdf.name;
+
+    pdfStatus.textContent =
+        "PDF loaded. Ask Dentora about it.";
+
+    pdfPanel.classList.add(
+        "show"
+    );
+
+    pdfBadge.style.display =
+        "flex";
+
+}
+
+
+/* =========================================================
+   INITIALIZATION
+========================================================= */
+
+loadHistory();
+
+renderHistory();
+
+setMode(
+    "study"
+);
+
+
+/*
+    Start with welcome screen.
+*/
+
+showWelcomeInterface();
+
+
+/*
+    Make sure textarea is ready.
+*/
+
+autoResize(
+    messageInput
+);
+
+
+/*
+    Focus textbox on desktop.
+*/
+
+if (
+    window.innerWidth > 760
+) {
+
+    setTimeout(() => {
+
+        messageInput.focus();
+
+    }, 400);
+
+}
+
+
+/* =========================================================
+   GLOBAL ERROR PROTECTION
+========================================================= */
+
+window.addEventListener(
+    "error",
+    function(event) {
+
+        console.error(
+            "Dentora frontend error:",
+            event.error || event.message
+        );
 
     }
 );
-```
 
-}, 100);
-
-/*
-Close mobile sidebar
-when resizing back to desktop.
-*/
 
 window.addEventListener(
-"resize",
-() => {
+    "unhandledrejection",
+    function(event) {
 
-```
-    if (
-        window.innerWidth > 850
-    ) {
-
-        closeSidebar();
+        console.error(
+            "Dentora promise error:",
+            event.reason
+        );
 
     }
-
-}
-```
-
 );
 
 </script>
