@@ -937,7 +937,7 @@ body {
 
 /* =========================
    CONFIG
-========================= */
+========================= *
 
 const API_BASE =
     "https://dentalstudyai.onrender.com";
@@ -1182,26 +1182,24 @@ async function sendMessage() {
          */
 
 
-        if (
-            !data ||
-            typeof data.response !== "string" ||
-            !data.response.trim()
-        ) {
+if (
+    !data ||
+    typeof data.reply !== "string" ||
+    !data.reply.trim()
+) {
 
-            throw new Error(
-                "Backend returned no response text."
-            );
+    throw new Error(
+        "Backend returned no response text."
+    );
 
-        }
-
-
-        addMessage(
-            data.response,
-            "ai",
-            data.provider
-        );
+}
 
 
+addMessage(
+    data.reply,
+    "ai",
+    data.provider
+);
         /* Save conversation */
 
         chatMessages.push({
