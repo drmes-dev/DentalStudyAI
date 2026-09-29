@@ -36,6 +36,37 @@
 
 * {
     box-sizing: border-box;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(103,232,249,.32) transparent;
+}
+
+*::-webkit-scrollbar {
+    width: 9px;
+    height: 9px;
+}
+
+*::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+    border-radius: 999px;
+    border: 2px solid transparent;
+    background:
+        linear-gradient(
+            180deg,
+            rgba(103,232,249,.58),
+            rgba(129,140,248,.50)
+        ) padding-box;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+    background:
+        linear-gradient(
+            180deg,
+            rgba(103,232,249,.82),
+            rgba(129,140,248,.72)
+        ) padding-box;
 }
 
 html,
@@ -195,7 +226,9 @@ body {
     border: 1px solid rgba(103,232,249,.22);
 
     box-shadow:
-        0 0 30px rgba(103,232,249,.10);
+        inset 0 1px 0 rgba(255,255,255,.08),
+        0 10px 28px rgba(0,0,0,.18),
+        0 0 34px rgba(103,232,249,.11);
 }
 
 .brand-text h1 {
@@ -212,12 +245,24 @@ body {
 /* New chat */
 
 .new-chat {
+    position: relative;
+    overflow: hidden;
+
     width: 100%;
-    border: 1px solid var(--border-light);
-    background: rgba(255,255,255,.045);
-    color: var(--text);
-    padding: 12px 14px;
-    border-radius: 14px;
+
+    border: 1px solid rgba(103,232,249,.15);
+    border-radius: 15px;
+
+    background:
+        linear-gradient(
+            135deg,
+            rgba(16,38,60,.78),
+            rgba(10,23,40,.70)
+        );
+
+    color: #eaf6ff;
+
+    padding: 11px 14px;
 
     cursor: pointer;
 
@@ -225,15 +270,55 @@ body {
     align-items: center;
     gap: 9px;
 
-    font-size: 13px;
-    font-weight: 600;
+    font-size: 12px;
+    font-weight: 700;
 
-    transition: .2s ease;
+    box-shadow:
+        inset 0 1px 0 rgba(255,255,255,.045),
+        0 8px 24px rgba(0,0,0,.13);
+
+    transition:
+        transform .2s ease,
+        border-color .2s ease,
+        box-shadow .2s ease,
+        background .2s ease;
+}
+
+.new-chat::after {
+    content: "";
+    position: absolute;
+    left: 14px;
+    right: 14px;
+    bottom: 0;
+    height: 1px;
+
+    background:
+        linear-gradient(
+            90deg,
+            transparent,
+            rgba(103,232,249,.38),
+            transparent
+        );
+
+    opacity: .55;
 }
 
 .new-chat:hover {
-    background: rgba(255,255,255,.08);
-    transform: translateY(-1px);
+    transform: translateY(-2px);
+
+    border-color: rgba(103,232,249,.34);
+
+    background:
+        linear-gradient(
+            135deg,
+            rgba(19,47,73,.92),
+            rgba(12,28,48,.84)
+        );
+
+    box-shadow:
+        inset 0 1px 0 rgba(255,255,255,.065),
+        0 11px 28px rgba(0,0,0,.18),
+        0 0 20px rgba(103,232,249,.055);
 }
 
 /* Mode cards */
@@ -605,6 +690,7 @@ body {
 /* Header */
 
 .header {
+    position: relative;
     height: 72px;
     flex-shrink: 0;
 
@@ -614,10 +700,41 @@ body {
 
     padding: 0 25px;
 
-    border-bottom: 1px solid var(--border);
+    border-bottom: 1px solid rgba(137,190,255,.10);
 
-    background: rgba(7,17,31,.42);
-    backdrop-filter: blur(20px);
+    background:
+        linear-gradient(
+            180deg,
+            rgba(8,20,37,.82),
+            rgba(7,17,31,.56)
+        );
+
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+
+    box-shadow:
+        inset 0 -1px 0 rgba(255,255,255,.018),
+        0 12px 34px rgba(0,0,0,.10);
+}
+
+.header::after {
+    content: "";
+    position: absolute;
+    left: 28%;
+    right: 28%;
+    bottom: -1px;
+    height: 1px;
+
+    background:
+        linear-gradient(
+            90deg,
+            transparent,
+            rgba(103,232,249,.28),
+            rgba(129,140,248,.24),
+            transparent
+        );
+
+    pointer-events: none;
 }
 
 .header-left {
@@ -632,22 +749,28 @@ body {
     width: 38px;
     height: 38px;
 
-    border: 1px solid var(--border);
-    border-radius: 11px;
+    border: 1px solid rgba(132,184,240,.14);
+    border-radius: 13px;
 
-    background: rgba(255,255,255,.04);
+    background:
+        linear-gradient(
+            145deg,
+            rgba(22,42,67,.78),
+            rgba(10,22,39,.72)
+        );
+
     color: var(--text);
-
     cursor: pointer;
 }
 
 .page-title {
     font-size: 15px;
-    font-weight: 700;
+    font-weight: 760;
+    letter-spacing: -.25px;
 }
 
 .page-subtitle {
-    color: var(--muted);
+    color: #71879e;
     font-size: 10px;
     margin-top: 3px;
 }
@@ -664,37 +787,92 @@ body {
     align-items: center;
     gap: 6px;
 
-    padding: 7px 10px;
+    padding: 8px 11px;
     border-radius: 999px;
 
     font-size: 10px;
-    color: var(--accent);
+    color: #bff7ff;
 
-    border: 1px solid rgba(103,232,249,.16);
-    background: rgba(103,232,249,.06);
+    border: 1px solid rgba(103,232,249,.18);
+
+    background:
+        linear-gradient(
+            135deg,
+            rgba(103,232,249,.08),
+            rgba(129,140,248,.06)
+        );
+
+    box-shadow:
+        inset 0 1px 0 rgba(255,255,255,.04);
 }
 
 .icon-button {
-    width: 36px;
-    height: 36px;
+    position: relative;
+
+    width: 42px;
+    height: 42px;
 
     display: flex;
     align-items: center;
     justify-content: center;
 
-    border-radius: 11px;
-    border: 1px solid var(--border);
+    border-radius: 15px;
+    border: 1px solid rgba(137,190,255,.15);
 
-    background: rgba(255,255,255,.035);
-    color: var(--muted);
+    background:
+        linear-gradient(
+            145deg,
+            rgba(20,39,64,.94),
+            rgba(9,20,36,.92)
+        );
+
+    color: #bfefff;
+
+    box-shadow:
+        inset 0 1px 0 rgba(255,255,255,.055),
+        0 10px 28px rgba(0,0,0,.20),
+        0 0 0 1px rgba(255,255,255,.012);
 
     cursor: pointer;
-    transition: .2s ease;
+
+    transition:
+        transform .2s ease,
+        border-color .2s ease,
+        box-shadow .2s ease,
+        color .2s ease;
+}
+
+.icon-button::before {
+    content: "";
+    position: absolute;
+    inset: 4px;
+
+    border-radius: 11px;
+    border: 1px solid rgba(255,255,255,.025);
+
+    pointer-events: none;
+}
+
+.icon-button svg {
+    width: 18px;
+    height: 18px;
+    filter: drop-shadow(0 0 8px rgba(103,232,249,.22));
 }
 
 .icon-button:hover {
-    color: var(--text);
-    background: rgba(255,255,255,.07);
+    transform: translateY(-2px);
+
+    color: #ffffff;
+    border-color: rgba(103,232,249,.38);
+
+    box-shadow:
+        inset 0 1px 0 rgba(255,255,255,.08),
+        0 13px 30px rgba(0,0,0,.26),
+        0 0 24px rgba(103,232,249,.10);
+}
+
+.icon-button:active {
+    transform: translateY(0) scale(.97);
 }
 
 /* =========================
@@ -1272,25 +1450,60 @@ body {
 ========================= */
 
 .composer-area {
+    position: relative;
     flex-shrink: 0;
 
     padding:
-        10px
-        max(24px, calc((100% - 900px) / 2))
-        18px;
+        12px
+        max(24px, calc((100% - 940px) / 2))
+        20px;
+}
+
+.composer-area::before {
+    content: "";
+    position: absolute;
+    left: 50%;
+    bottom: 10px;
+
+    width: min(650px, 72%);
+    height: 78px;
+
+    transform: translateX(-50%);
+
+    background:
+        radial-gradient(
+            ellipse at center,
+            rgba(56,189,248,.12),
+            rgba(99,102,241,.055) 42%,
+            transparent 72%
+        );
+
+    filter: blur(26px);
+    pointer-events: none;
 }
 
 .pdf-panel {
+    position: relative;
+    z-index: 2;
+
     display: none;
 
     margin-bottom: 9px;
+    padding: 11px 13px;
 
-    padding: 10px 12px;
+    border: 1px solid rgba(103,232,249,.16);
+    border-radius: 15px;
 
-    border: 1px solid rgba(103,232,249,.13);
-    background: rgba(103,232,249,.045);
+    background:
+        linear-gradient(
+            135deg,
+            rgba(13,34,52,.90),
+            rgba(12,22,42,.86)
+        );
 
-    border-radius: 13px;
+    box-shadow:
+        inset 0 1px 0 rgba(255,255,255,.04),
+        0 10px 30px rgba(0,0,0,.16);
 
     align-items: center;
     justify-content: space-between;
@@ -1306,9 +1519,9 @@ body {
 }
 
 .pdf-name {
-    color: var(--accent);
+    color: #bdf7ff;
     font-size: 10px;
-    font-weight: 700;
+    font-weight: 750;
 
     overflow: hidden;
     text-overflow: ellipsis;
@@ -1316,99 +1529,200 @@ body {
 }
 
 .pdf-status {
-    color: var(--muted);
+    color: #72889f;
     font-size: 9px;
     margin-top: 2px;
 }
 
 .remove-pdf {
-    border: 0;
-    background: transparent;
+    width: 30px;
+    height: 30px;
+
+    border: 1px solid rgba(255,255,255,.06);
+    border-radius: 10px;
+
+    background: rgba(255,255,255,.025);
     color: var(--muted);
 
     cursor: pointer;
+    transition: .18s ease;
 }
 
 .remove-pdf:hover {
-    color: var(--danger);
+    color: #ffd0d8;
+    border-color: rgba(251,113,133,.22);
+    background: rgba(251,113,133,.07);
 }
 
 .composer {
     position: relative;
+    z-index: 2;
 
     display: flex;
-    align-items: flex-end;
-    gap: 7px;
+    align-items: center;
+    gap: 9px;
 
-    padding: 9px;
+    padding: 10px;
 
-    border: 1px solid var(--border-light);
-    background: rgba(12,24,41,.85);
+    border: 1px solid rgba(131,190,246,.17);
+    border-radius: 22px;
 
-    border-radius: 18px;
+    background:
+        linear-gradient(
+            135deg,
+            rgba(13,29,49,.94),
+            rgba(9,20,37,.92)
+        );
 
-    box-shadow: var(--shadow);
+    box-shadow:
+        inset 0 1px 0 rgba(255,255,255,.055),
+        inset 0 -1px 0 rgba(0,0,0,.16),
+        0 18px 45px rgba(0,0,0,.28),
+        0 0 0 1px rgba(255,255,255,.012);
 
-    backdrop-filter: blur(20px);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+
+    transition:
+        border-color .2s ease,
+        box-shadow .2s ease,
+        transform .2s ease;
+}
+
+.composer::after {
+    content: "";
+    position: absolute;
+    left: 42px;
+    right: 42px;
+    top: 0;
+    height: 1px;
+
+    background:
+        linear-gradient(
+            90deg,
+            transparent,
+            rgba(103,232,249,.30),
+            rgba(129,140,248,.22),
+            transparent
+        );
+
+    pointer-events: none;
 }
 
 .composer:focus-within {
-    border-color: rgba(103,232,249,.22);
+    border-color: rgba(103,232,249,.34);
+
     box-shadow:
-        0 25px 80px rgba(0,0,0,.35),
-        0 0 0 3px rgba(103,232,249,.035);
+        inset 0 1px 0 rgba(255,255,255,.07),
+        0 20px 52px rgba(0,0,0,.32),
+        0 0 0 3px rgba(103,232,249,.035),
+        0 0 30px rgba(103,232,249,.055);
 }
 
 .attach-button,
 .send-button {
+    position: relative;
     flex-shrink: 0;
 
-    width: 39px;
-    height: 39px;
+    width: 46px;
+    height: 46px;
 
     display: flex;
     align-items: center;
     justify-content: center;
 
-    border-radius: 12px;
+    border-radius: 15px;
 
     cursor: pointer;
+
+    transition:
+        transform .2s ease,
+        border-color .2s ease,
+        box-shadow .2s ease,
+        background .2s ease,
+        color .2s ease;
+}
+
+.attach-button svg,
+.send-button svg {
+    width: 19px;
+    height: 19px;
 }
 
 .attach-button {
-    border: 1px solid var(--border);
-    background: rgba(255,255,255,.035);
-    color: var(--muted);
+    border: 1px solid rgba(137,190,255,.14);
+
+    background:
+        linear-gradient(
+            145deg,
+            rgba(25,47,76,.82),
+            rgba(12,27,46,.82)
+        );
+
+    color: #9fb8d1;
+
+    box-shadow:
+        inset 0 1px 0 rgba(255,255,255,.045),
+        0 8px 20px rgba(0,0,0,.16);
 }
 
 .attach-button:hover {
-    color: var(--text);
+    transform: translateY(-2px);
+
+    color: #d5f7ff;
+    border-color: rgba(103,232,249,.38);
+
+    box-shadow:
+        inset 0 1px 0 rgba(255,255,255,.07),
+        0 10px 24px rgba(0,0,0,.20),
+        0 0 20px rgba(103,232,249,.08);
 }
 
 .send-button {
-    border: 0;
+    border: 1px solid rgba(255,255,255,.17);
 
-    color: #07111f;
+    color: #06111f;
 
     background:
         linear-gradient(
             135deg,
-            var(--accent),
-            var(--accent2)
+            #79f1ff 0%,
+            #63b8ff 48%,
+            #8c8dff 100%
         );
 
-    font-weight: 900;
+    box-shadow:
+        inset 0 1px 0 rgba(255,255,255,.36),
+        0 11px 26px rgba(79,161,255,.24),
+        0 0 22px rgba(103,232,249,.10);
+}
 
-    transition: .2s ease;
+.send-button::before {
+    content: "";
+    position: absolute;
+    inset: 3px;
+
+    border-radius: 12px;
+    border: 1px solid rgba(255,255,255,.14);
+
+    pointer-events: none;
 }
 
 .send-button:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 7px 25px rgba(103,232,249,.18);
+    transform: translateY(-2px) scale(1.035);
+
+    box-shadow:
+        inset 0 1px 0 rgba(255,255,255,.40),
+        0 14px 32px rgba(79,161,255,.32),
+        0 0 30px rgba(103,232,249,.16);
+}
+
+.send-button:active {
+    transform: translateY(0) scale(.97);
 }
 
 .send-button:disabled {
-    opacity: .35;
+    opacity: .36;
     cursor: not-allowed;
     transform: none;
     box-shadow: none;
@@ -1417,7 +1731,7 @@ body {
 #messageInput {
     flex: 1;
 
-    min-height: 39px;
+    min-height: 46px;
     max-height: 160px;
 
     resize: none;
@@ -1426,27 +1740,36 @@ body {
     outline: none;
 
     background: transparent;
-    color: var(--text);
+    color: #edf6ff;
 
     font-family: inherit;
-    font-size: 13px;
-
+    font-size: 14px;
+    font-weight: 480;
     line-height: 1.5;
 
-    padding: 9px 4px;
+    padding: 12px 7px;
 
     overflow-y: auto;
 }
 
 #messageInput::placeholder {
-    color: #5e738c;
+    color: #607890;
+    transition: color .2s ease;
+}
+
+.composer:focus-within #messageInput::placeholder {
+    color: #7890aa;
 }
 
 .input-hint {
+    position: relative;
+    z-index: 2;
+
     text-align: center;
 
-    color: #50647b;
-    font-size: 9px;
+    color: #435a72;
+    font-size: 8.5px;
+    letter-spacing: .015em;
 
     margin-top: 8px;
 }
@@ -1634,6 +1957,18 @@ body {
 
 .toast.success {
     border-color: rgba(74,222,128,.2);
+}
+
+
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: .01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: .01ms !important;
+        scroll-behavior: auto !important;
+    }
 }
 
 </style>
@@ -1850,8 +2185,26 @@ body {
                     id="clearChatButton"
                     title="Clear current chat"
                     type="button"
+                    aria-label="Clear current chat"
                 >
-                    ✨
+                    <svg
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        aria-hidden="true"
+                    >
+                        <path
+                            d="M12 3.5L13.7 8.3L18.5 10L13.7 11.7L12 16.5L10.3 11.7L5.5 10L10.3 8.3L12 3.5Z"
+                            stroke="currentColor"
+                            stroke-width="1.55"
+                            stroke-linejoin="round"
+                        />
+                        <path
+                            d="M18.2 15.2L19 17.4L21.2 18.2L19 19L18.2 21.2L17.4 19L15.2 18.2L17.4 17.4L18.2 15.2Z"
+                            stroke="currentColor"
+                            stroke-width="1.35"
+                            stroke-linejoin="round"
+                        />
+                    </svg>
                 </button>
 
             </div>
@@ -2040,8 +2393,27 @@ body {
                         id="attachButton"
                         type="button"
                         title="Upload PDF"
+                        aria-label="Upload PDF"
                     >
-                        📎
+                        <svg
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            aria-hidden="true"
+                        >
+                            <path
+                                d="M8.7 12.9L14.4 7.2C16 5.6 18.5 5.6 20 7.2C21.5 8.7 21.5 11.2 20 12.7L12.1 20.6C9.9 22.8 6.3 22.8 4.1 20.6C1.9 18.4 1.9 14.8 4.1 12.6L12.2 4.5"
+                                stroke="currentColor"
+                                stroke-width="1.65"
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                            />
+                            <path
+                                d="M7.6 15.9L15.3 8.2"
+                                stroke="currentColor"
+                                stroke-width="1.65"
+                                stroke-linecap="round"
+                            />
+                        </svg>
                     </button>
 
                     <input
@@ -2062,8 +2434,27 @@ body {
                         id="sendButton"
                         type="button"
                         title="Send"
+                        aria-label="Send message"
                     >
-                        ↑
+                        <svg
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            aria-hidden="true"
+                        >
+                            <path
+                                d="M12 18V6"
+                                stroke="currentColor"
+                                stroke-width="2"
+                                stroke-linecap="round"
+                            />
+                            <path
+                                d="M7.5 10.5L12 6L16.5 10.5"
+                                stroke="currentColor"
+                                stroke-width="2"
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                            />
+                        </svg>
                     </button>
 
                 </div>
@@ -2091,7 +2482,7 @@ body {
    DENTORA CONFIGURATION
 ========================================================= */
 
-window.DENTORA_BUILD = "2026-09-29-live-table-history-fix";
+window.DENTORA_BUILD = "2026-09-30-premium-ui-v1";
 
 const API_BASE =
     "https://dentalstudyai.onrender.com";
