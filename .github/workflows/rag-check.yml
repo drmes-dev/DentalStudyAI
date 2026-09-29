@@ -1,0 +1,38 @@
+name: Dentora RAG checks
+
+on:
+  push:
+    branches:
+      - main
+      - rag-v1
+  pull_request:
+
+jobs:
+  syntax:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Check Python syntax
+        run: |
+          python -m py_compile backend/main.py backend/rag.py tools/index_library.py
+
+      - name: Extract frontend JavaScript
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+
+          html = Path("docs/index.html").read_text(encoding="utf-8")
+          match = re.search(r"<script>([\\s\\S]*?)</script>", html)
+          if not match:
+              raise SystemExit("No script block found")
+          Path("/tmp/dentora-frontend.js").write_text(match.group(1), encoding="utf-8")
+          PY
+
+      - name: Check frontend JavaScript syntax
+        run: node --check /tmp/dentora-frontend.js
