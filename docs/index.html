@@ -1286,6 +1286,61 @@ body {
     color: var(--accent);
 }
 
+.source-panel {
+    margin-top: 11px;
+    padding-top: 10px;
+    border-top: 1px solid rgba(103,232,249,.10);
+}
+
+.source-heading {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 7px;
+    color: #8ba5be;
+    font-size: 9px;
+    font-weight: 750;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+}
+
+.source-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.source-card {
+    max-width: 100%;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 8px;
+    border-radius: 9px;
+    border: 1px solid rgba(103,232,249,.13);
+    background: rgba(103,232,249,.045);
+    color: #9db5cd;
+    font-size: 9px;
+    line-height: 1.35;
+    text-decoration: none;
+    transition: .18s ease;
+}
+
+a.source-card:hover {
+    color: #ddfbff;
+    border-color: rgba(103,232,249,.30);
+    background: rgba(103,232,249,.08);
+}
+
+.source-label {
+    color: #bdf7ff;
+    font-weight: 800;
+}
+
+.source-page {
+    color: #7f96ae;
+}
+
 /* Markdown-like formatting */
 
 .message-bubble strong {
@@ -2482,7 +2537,7 @@ body {
    DENTORA CONFIGURATION
 ========================================================= */
 
-window.DENTORA_BUILD = "2026-09-30-premium-ui-v1";
+window.DENTORA_BUILD = "2026-09-30-rag-v1";
 
 const API_BASE =
     "https://dentalstudyai.onrender.com";
@@ -2509,6 +2564,35 @@ let isSending = false;
 let uploadedPdf = null;
 
 let chatHistory = [];
+
+let dentoraSessionId =
+    localStorage.getItem(
+        "dentora_session_id"
+    );
+
+if (!dentoraSessionId) {
+
+    dentoraSessionId =
+        (
+            window.crypto &&
+            typeof window.crypto.randomUUID === "function"
+        )
+            ? window.crypto.randomUUID()
+            : (
+                "dentora-" +
+                Date.now() +
+                "-" +
+                Math.random()
+                    .toString(36)
+                    .slice(2)
+            );
+
+    localStorage.setItem(
+        "dentora_session_id",
+        dentoraSessionId
+    );
+
+}
 
 
 /* =========================================================
@@ -2868,6 +2952,7 @@ function addMessage(
     text,
     role,
     provider = null,
+    sources = [],
     save = true
 ) {
 
@@ -2945,6 +3030,145 @@ function addMessage(
     wrapper.appendChild(
         meta
     );
+
+
+    if (
+        role === "assistant" &&
+        Array.isArray(sources) &&
+        sources.length > 0
+    ) {
+
+        const sourcePanel =
+            document.createElement("div");
+
+        sourcePanel.className =
+            "source-panel";
+
+
+        const sourceHeading =
+            document.createElement("div");
+
+        sourceHeading.className =
+            "source-heading";
+
+        sourceHeading.textContent =
+            "Sources used";
+
+        sourcePanel.appendChild(
+            sourceHeading
+        );
+
+
+        const sourceList =
+            document.createElement("div");
+
+        sourceList.className =
+            "source-list";
+
+
+        sources.forEach(
+            source => {
+
+                const hasUrl =
+                    typeof source.source_url === "string" &&
+                    /^https?:\/\//i.test(
+                        source.source_url
+                    );
+
+
+                const card =
+                    document.createElement(
+                        hasUrl
+                            ? "a"
+                            : "div"
+                    );
+
+                card.className =
+                    "source-card";
+
+
+                if (hasUrl) {
+
+                    card.href =
+                        source.source_url;
+
+                    card.target =
+                        "_blank";
+
+                    card.rel =
+                        "noopener noreferrer";
+
+                }
+
+
+                const label =
+                    document.createElement("span");
+
+                label.className =
+                    "source-label";
+
+                label.textContent =
+                    source.label
+                    || "S";
+
+
+                const name =
+                    document.createElement("span");
+
+                name.textContent =
+                    source.filename
+                    || source.title
+                    || "Uploaded source";
+
+
+                const page =
+                    document.createElement("span");
+
+                page.className =
+                    "source-page";
+
+                page.textContent =
+                    source.page
+                        ? "p. " + source.page
+                        : source.category
+                            ? source.category
+                            : "";
+
+
+                card.appendChild(
+                    label
+                );
+
+                card.appendChild(
+                    name
+                );
+
+                if (
+                    page.textContent
+                ) {
+                    card.appendChild(
+                        page
+                    );
+                }
+
+
+                sourceList.appendChild(
+                    card
+                );
+
+            }
+        );
+
+
+        sourcePanel.appendChild(
+            sourceList
+        );
+
+        wrapper.appendChild(
+            sourcePanel
+        );
+
+    }
 
 
     if (role === "assistant") {
@@ -3034,7 +3258,18 @@ function addMessage(
                     : "assistant",
 
             content:
-                text
+                text,
+
+            provider:
+                role === "assistant"
+                    ? provider
+                    : null,
+
+            sources:
+                role === "assistant" &&
+                Array.isArray(sources)
+                    ? sources
+                    : []
         });
 
         saveCurrentChat();
@@ -3297,7 +3532,10 @@ function loadChat(id) {
             addMessage(
                 message.content,
                 message.role,
-                null,
+                message.provider || null,
+                Array.isArray(message.sources)
+                    ? message.sources
+                    : [],
                 false
             );
 
@@ -3536,7 +3774,13 @@ async function sendMessage() {
                                 message,
 
                             mode:
-                                currentMode
+                                currentMode,
+
+                            session_id:
+                                dentoraSessionId,
+
+                            use_library:
+                                true
 
                         })
                 }
@@ -3607,7 +3851,10 @@ async function sendMessage() {
         addMessage(
             aiReply,
             "assistant",
-            data.provider || null
+            data.provider || null,
+            Array.isArray(data.sources)
+                ? data.sources
+                : []
         );
 
 
@@ -3989,6 +4236,11 @@ pdfInput.addEventListener(
             formData.append(
                 "file",
                 file
+            );
+
+            formData.append(
+                "session_id",
+                dentoraSessionId
             );
 
 

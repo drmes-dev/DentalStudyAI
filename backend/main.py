@@ -1,31 +1,53 @@
-from fastapi import FastAPI, UploadFile, File
+from fastapi import FastAPI, UploadFile, File, Form, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
-from pathlib import Path
+from pydantic import BaseModel, Field
+from io import BytesIO
 from pypdf import PdfReader
 from pdf2image import convert_from_bytes
 from google import genai
 from groq import Groq
 from openai import OpenAI
 from dotenv import load_dotenv
-import pytesseract
+from typing import Any, Dict, List, Optional
 import os
+import re
+import time
+
+import pytesseract
 import ollama
 
+from rag import (
+    RAG_CONTEXT_CHUNKS,
+    build_context,
+    chunk_pages,
+    document_id,
+    normalize_text,
+    public_sources,
+    rag_store,
+    safe_category,
+)
 
-# =========================
+
+# =========================================================
 # ENVIRONMENT
-# =========================
+# =========================================================
 
 load_dotenv()
 
+DENTORA_ADMIN_KEY = os.getenv("DENTORA_ADMIN_KEY", "").strip()
+MAX_WEB_INGEST_MB = int(os.getenv("MAX_WEB_INGEST_MB", "45"))
+MAX_WEB_OCR_PAGES = int(os.getenv("MAX_WEB_OCR_PAGES", "30"))
 
-# =========================
+
+# =========================================================
 # APP
-# =========================
+# =========================================================
 
-app = FastAPI()
-
+app = FastAPI(
+    title="Dentora API",
+    version="2.0.0",
+    description="Dentora BDS study assistant with persistent evidence-grounded RAG.",
+)
 
 app.add_middleware(
     CORSMiddleware,
@@ -36,535 +58,632 @@ app.add_middleware(
 )
 
 
-# =========================
+# =========================================================
 # AI CLIENTS
-# =========================
+# =========================================================
 
-gemini_client = genai.Client(
-    api_key=os.getenv("GEMINI_API_KEY")
-)
+gemini_client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 
-groq_client = Groq(
-    api_key=os.getenv("GROQ_API_KEY")
-)
+groq_client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 
 qwen_client = OpenAI(
     api_key=os.getenv("DASHSCOPE_API_KEY"),
-    base_url="https://dashscope-intl.aliyuncs.com/compatible-mode/v1"
+    base_url="https://dashscope-intl.aliyuncs.com/compatible-mode/v1",
 )
 
 
-# =========================
-# CHAT REQUEST
-# =========================
+# =========================================================
+# REQUEST MODELS
+# =========================================================
 
 class ChatRequest(BaseModel):
     message: str
-    mode: str
+    mode: str = "study"
+    session_id: str = "default"
+    use_library: bool = True
+    categories: Optional[List[str]] = None
 
 
-# =========================
-# PDF MEMORY
-# =========================
-
-uploaded_pdf_text = ""
-uploaded_pdf_name = ""
-uploaded_pdf_chunks = []
+class RagSearchRequest(BaseModel):
+    query: str
+    categories: Optional[List[str]] = None
+    top_k: int = Field(default=7, ge=1, le=20)
 
 
-def create_pdf_chunks(text, chunk_size=3000, overlap=300):
+# =========================================================
+# TEMPORARY PDF SESSION MEMORY
+# =========================================================
+#
+# This is intentionally temporary. Persistent knowledge is
+# stored in Pinecone. Browser sessions receive separate IDs
+# so one visitor's PDF is not mixed with another visitor's PDF.
 
-    chunks = []
-
-    start = 0
-    text_length = len(text)
-
-    while start < text_length:
-
-        end = min(
-            start + chunk_size,
-            text_length
-        )
-
-        chunk = text[start:end].strip()
-
-        if chunk:
-            chunks.append(chunk)
-
-        if end >= text_length:
-            break
-
-        start = end - overlap
-
-    return chunks
+session_pdfs: Dict[str, Dict[str, Any]] = {}
 
 
-def find_relevant_pdf_chunks(
-    query,
-    chunks,
-    max_chunks=5
-):
+# =========================================================
+# PDF HELPERS
+# =========================================================
 
-    if not chunks:
-        return []
+def extract_pdf_pages(
+    contents: bytes,
+    allow_ocr: bool = True,
+    web_mode: bool = True,
+) -> Dict[str, Any]:
+    reader = PdfReader(BytesIO(contents))
+    pages = []
+    scanned_pages = []
 
-    query_words = {
-        word.lower().strip(
-            ".,!?;:()[]{}"
-        )
-        for word in query.split()
-        if len(word) > 2
-    }
+    for number, page in enumerate(reader.pages, start=1):
+        text = normalize_text(page.extract_text() or "")
 
-    scored_chunks = []
+        if len(text) < 40:
+            scanned_pages.append(number)
 
-    for chunk in chunks:
+        pages.append({
+            "page": number,
+            "text": text,
+        })
 
-        chunk_lower = chunk.lower()
+    ocr_used = False
+    ocr_failed = False
 
-        score = 0
+    if (
+        allow_ocr
+        and scanned_pages
+        and (not web_mode or len(reader.pages) <= MAX_WEB_OCR_PAGES)
+    ):
+        try:
+            images = convert_from_bytes(contents, dpi=180)
 
-        for word in query_words:
+            for page_number in scanned_pages:
+                ocr_text = normalize_text(
+                    pytesseract.image_to_string(images[page_number - 1])
+                )
+                if ocr_text:
+                    pages[page_number - 1]["text"] = ocr_text
 
-            if word in chunk_lower:
-                score += 1
+            ocr_used = True
 
-        scored_chunks.append(
-            (score, chunk)
-        )
+        except Exception as exc:
+            print("OCR fallback error:", exc)
+            ocr_failed = True
 
-    scored_chunks.sort(
-        key=lambda item: item[0],
-        reverse=True
-    )
-
-    relevant = [
-        chunk
-        for score, chunk in scored_chunks[:max_chunks]
-        if score > 0
+    unresolved = [
+        page["page"]
+        for page in pages
+        if len(normalize_text(page.get("text", ""))) < 40
     ]
 
-    return relevant
+    return {
+        "pages": pages,
+        "page_count": len(reader.pages),
+        "ocr_used": ocr_used,
+        "ocr_failed": ocr_failed,
+        "unresolved_scanned_pages": unresolved,
+    }
 
 
-# =========================
-# ROOT
-# =========================
+def keyword_score(query: str, text: str) -> float:
+    words = {
+        word
+        for word in re.findall(r"[a-zA-Z0-9]+", str(query).lower())
+        if len(word) > 2
+    }
+    if not words:
+        return 0.0
+
+    haystack = str(text).lower()
+    hits = sum(1 for word in words if word in haystack)
+    return hits / len(words)
+
+
+def find_relevant_session_chunks(
+    query: str,
+    chunks: List[Dict[str, Any]],
+    max_chunks: int = 4,
+) -> List[Dict[str, Any]]:
+    ranked = []
+
+    for chunk in chunks:
+        score = keyword_score(query, chunk.get("text", ""))
+        if score > 0:
+            ranked.append((score, chunk))
+
+    ranked.sort(key=lambda item: item[0], reverse=True)
+    return [item[1] for item in ranked[:max_chunks]]
+
+
+# =========================================================
+# SECURITY
+# =========================================================
+
+def require_admin(supplied_key: Optional[str]):
+    if not DENTORA_ADMIN_KEY:
+        raise HTTPException(
+            status_code=503,
+            detail="DENTORA_ADMIN_KEY is not configured on the server.",
+        )
+
+    if supplied_key != DENTORA_ADMIN_KEY:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid admin key.",
+        )
+
+
+# =========================================================
+# AI GENERATION
+# =========================================================
+
+def generate_with_fallback(prompt: str) -> Dict[str, str]:
+    try:
+        response = gemini_client.models.generate_content(
+            model="gemini-3.5-flash",
+            contents=prompt,
+        )
+        if response and response.text:
+            return {
+                "response": response.text,
+                "provider": "Gemini",
+            }
+    except Exception as exc:
+        print("Gemini error:", exc)
+
+    try:
+        response = groq_client.chat.completions.create(
+            model="openai/gpt-oss-120b",
+            messages=[{
+                "role": "user",
+                "content": prompt,
+            }],
+        )
+        text = response.choices[0].message.content
+        if text:
+            return {
+                "response": text,
+                "provider": "Groq",
+            }
+    except Exception as exc:
+        print("Groq error:", exc)
+
+    try:
+        response = qwen_client.chat.completions.create(
+            model="qwen-plus",
+            messages=[{
+                "role": "user",
+                "content": prompt,
+            }],
+        )
+        text = response.choices[0].message.content
+        if text:
+            return {
+                "response": text,
+                "provider": "Qwen API",
+            }
+    except Exception as exc:
+        print("Qwen API error:", exc)
+
+    try:
+        response = ollama.chat(
+            model="qwen3:8b",
+            messages=[{
+                "role": "user",
+                "content": prompt,
+            }],
+        )
+        text = response.get("message", {}).get("content", "")
+        if text:
+            return {
+                "response": text,
+                "provider": "Local Qwen",
+            }
+    except Exception as exc:
+        print("Ollama error:", exc)
+
+    return {
+        "response": "Dentora couldn't connect to the AI service. Please try again.",
+        "provider": "Error",
+    }
+
+
+# =========================================================
+# HEALTH
+# =========================================================
 
 @app.get("/")
 def root():
-
     return {
-        "message": "Dentora backend is running."
+        "message": "Dentora backend is running.",
+        "version": "2.0.0-rag",
     }
 
 
-# =========================
-# PDF UPLOAD
-# =========================
+@app.get("/rag/status")
+def rag_status():
+    return rag_store.status()
+
+
+# =========================================================
+# TEMPORARY PDF TUTOR
+# =========================================================
 
 @app.post("/upload-pdf")
 async def upload_pdf(
-    file: UploadFile = File(...)
+    file: UploadFile = File(...),
+    session_id: str = Form("default"),
 ):
+    filename = file.filename or "uploaded.pdf"
 
-    if not file.filename.lower().endswith(".pdf"):
-
+    if not filename.lower().endswith(".pdf"):
         return {
             "success": False,
-            "message": "Only PDF files are supported."
+            "message": "Only PDF files are supported.",
         }
 
     try:
-
         contents = await file.read()
+        extraction = extract_pdf_pages(contents, allow_ocr=True, web_mode=True)
+        chunks = chunk_pages(extraction["pages"])
 
-        temp_path = Path(
-            "temp_uploaded.pdf"
-        )
-
-        temp_path.write_bytes(
-            contents
-        )
-
-        reader = PdfReader(
-            str(temp_path)
-        )
-
-        text = ""
-
-        for page in reader.pages:
-
-            page_text = (
-                page.extract_text()
-                or ""
-            )
-
-            text += (
-                page_text
-                + "\n"
-            )
-
-        # OCR fallback for scanned PDFs
-        if len(text.strip()) < 100:
-
-            images = convert_from_bytes(
-                contents,
-                dpi=200
-            )
-
-            text = ""
-
-            for image in images:
-
-                page_text = (
-                    pytesseract.image_to_string(
-                        image
-                    )
-                )
-
-                text += (
-                    page_text
-                    + "\n"
-                )
-
-        temp_path.unlink(
-            missing_ok=True
-        )
-
-        global uploaded_pdf_text
-        global uploaded_pdf_name
-        global uploaded_pdf_chunks
-
-        uploaded_pdf_text = text
-
-        uploaded_pdf_name = (
-            file.filename
-        )
-
-        uploaded_pdf_chunks = (
-            create_pdf_chunks(text)
-        )
-
-        print(
-            f"PDF uploaded: {file.filename}"
-        )
-
-        print(
-            f"Pages: {len(reader.pages)}"
-        )
-
-        print(
-            f"Characters: {len(text)}"
-        )
-
-        print(
-            f"Chunks: {len(uploaded_pdf_chunks)}"
-        )
-
-        return {
-
-            "success": True,
-
-            "filename":
-                file.filename,
-
-            "pages":
-                len(reader.pages),
-
-            "text":
-                text
-
-        }
-
-    except Exception as e:
-
-        print(
-            "PDF upload error:",
-            e
-        )
-
-        return {
-
-            "success": False,
-
-            "message":
-                str(e)
-
-        }
-
-
-# =========================
-# CHAT
-# =========================
-
-@app.post("/chat")
-def chat(
-    request: ChatRequest
-):
-
-    # Student's actual question
-    message = request.message
-
-
-    # =========================
-    # PDF RETRIEVAL
-    # =========================
-
-    if uploaded_pdf_chunks:
-
-        relevant_chunks = (
-            find_relevant_pdf_chunks(
-                message,
-                uploaded_pdf_chunks
-            )
-        )
-
-        if relevant_chunks:
-
-            relevant_pdf = (
-                "\n\n".join(
-                    relevant_chunks
-                )
-            )
-
-        else:
-
-            relevant_pdf = (
-                "No directly relevant "
-                "PDF material was found "
-                "for this question."
-            )
-
-    else:
-
-        relevant_pdf = (
-            "No PDF has been uploaded."
-        )
-
-
-    # =========================
-    # PROMPT
-    # =========================
-
-    prompt = f"""
-You are Dentora by Ehsan — a dedicated BDS-level dental education tutor.
-
-STUDENT:
-The student is a final-year BDS student preparing for university examinations,
-viva examinations, OSCEs, clinical discussions, and dental academic work.
-
-CURRENT MODE:
-{request.mode}
-
-STUDENT'S QUESTION:
-{message}
-
-UPLOADED PDF MATERIAL:
----------------------
-{relevant_pdf}
-
-PDF INSTRUCTIONS:
-----------------
-If PDF material is available:
-
-- Use it as the primary source for questions related to the uploaded material.
-- Base explanations on the supplied PDF content.
-- Prioritize the PDF's terminology, classifications, explanations, and sequence.
-- You may add relevant BDS-level background knowledge when useful.
-- Do not invent information that is not supported by the PDF or established medical/dental knowledge.
-- If the PDF does not contain enough information to answer the question, say so briefly and then provide relevant background knowledge.
-
-GENERAL INSTRUCTIONS:
----------------------
-- Answer at final-year BDS level.
-- Be accurate and clinically relevant.
-- Explain concepts clearly.
-- For examinations, emphasize high-yield points.
-- For viva questions, give concise viva-ready answers.
-- For OSCE questions, focus on identification, clinical findings, steps, interpretation, and key points.
-- Use tables when useful.
-- Use bullet points for examination-friendly information.
-- Do not unnecessarily repeat the student's question.
-
-Answer the student's question now.
-"""
-
-
-    # =========================
-    # GEMINI
-    # =========================
-
-    try:
-
-        response = (
-            gemini_client.models.generate_content(
-                model="gemini-3.5-flash",
-                contents=prompt
-            )
-        )
-
-        return {
-
-            "response":
-                response.text,
-
-            "provider":
-                "Gemini"
-
-        }
-
-    except Exception as gemini_error:
-
-        print(
-            "Gemini error:",
-            gemini_error
-        )
-
-        error_text = str(
-            gemini_error
-        )
-
-        if not any(
-            code in error_text
-            for code in [
-                "429",
-                "503",
-                "RESOURCE_EXHAUSTED",
-                "UNAVAILABLE"
-            ]
-        ):
-
-            print(
-                "Gemini error is not "
-                "eligible for fallback."
-            )
-
+        if not chunks:
             return {
-
-                "response":
-                    "Dentora couldn't connect to the AI service. Please try again.",
-
-                "provider":
-                    "Error"
-
+                "success": False,
+                "message": (
+                    "No readable text was extracted. "
+                    "For a large scanned PDF, use Dentora's local library indexer."
+                ),
+                "pages": extraction["page_count"],
+                "unresolved_scanned_pages": extraction["unresolved_scanned_pages"],
             }
 
+        session_id = (session_id.strip() or "default")[:120]
 
-    # =========================
-    # GROQ FALLBACK
-    # =========================
+        session_pdfs[session_id] = {
+            "name": filename,
+            "chunks": chunks,
+            "pages": extraction["page_count"],
+            "uploaded_at": time.time(),
+        }
+
+        if len(session_pdfs) > 50:
+            oldest = sorted(
+                session_pdfs.items(),
+                key=lambda item: item[1].get("uploaded_at", 0),
+            )[:10]
+
+            for old_key, _ in oldest:
+                session_pdfs.pop(old_key, None)
+
+        return {
+            "success": True,
+            "filename": filename,
+            "pages": extraction["page_count"],
+            "chunks": len(chunks),
+            "ocr_used": extraction["ocr_used"],
+            "unresolved_scanned_pages": extraction["unresolved_scanned_pages"],
+            "message": "PDF is ready for this chat session.",
+        }
+
+    except Exception as exc:
+        print("PDF upload error:", exc)
+        return {
+            "success": False,
+            "message": str(exc),
+        }
+
+
+# =========================================================
+# PERSISTENT LIBRARY INGESTION
+# =========================================================
+
+@app.post("/rag/ingest-pdf")
+async def rag_ingest_pdf(
+    file: UploadFile = File(...),
+    category: str = Form("Other"),
+    title: str = Form(""),
+    source_url: str = Form(""),
+    replace_existing: bool = Form(False),
+    x_dentora_admin_key: Optional[str] = Header(
+        default=None,
+        alias="X-Dentora-Admin-Key",
+    ),
+):
+    require_admin(x_dentora_admin_key)
+
+    if not rag_store.configured:
+        raise HTTPException(
+            status_code=503,
+            detail="Persistent RAG is not configured yet.",
+        )
+
+    filename = file.filename or "document.pdf"
+
+    if not filename.lower().endswith(".pdf"):
+        raise HTTPException(
+            status_code=400,
+            detail="Only PDF files are supported.",
+        )
+
+    contents = await file.read()
+
+    if len(contents) > MAX_WEB_INGEST_MB * 1024 * 1024:
+        raise HTTPException(
+            status_code=413,
+            detail=(
+                f"Web ingestion is limited to {MAX_WEB_INGEST_MB} MB per PDF. "
+                "Use tools/index_library.py for large files."
+            ),
+        )
+
+    extraction = extract_pdf_pages(contents, allow_ocr=True, web_mode=True)
+    unresolved = extraction["unresolved_scanned_pages"]
+
+    if (
+        unresolved
+        and len(unresolved)
+        > max(3, int(extraction["page_count"] * 0.20))
+    ):
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "message": (
+                    "This PDF is mostly scanned and needs local OCR "
+                    "before persistent indexing."
+                ),
+                "unresolved_scanned_pages": unresolved,
+                "recommended_command": (
+                    f'python tools/index_library.py "PATH_TO_PDF" '
+                    f'--category "{safe_category(category)}"'
+                ),
+            },
+        )
+
+    resolved_title = title.strip() or os.path.splitext(filename)[0]
 
     try:
+        result = rag_store.index_pages(
+            doc_id=document_id(contents),
+            filename=filename,
+            title=resolved_title,
+            category=category,
+            pages=extraction["pages"],
+            source_url=source_url.strip(),
+            replace_existing=replace_existing,
+        )
+        result["ocr_used"] = extraction["ocr_used"]
+        result["unresolved_scanned_pages"] = unresolved
+        return result
 
-        response = (
-            groq_client.chat.completions.create(
-                model="openai/gpt-oss-120b",
-                messages=[
-                    {
-                        "role": "user",
-                        "content": prompt
-                    }
-                ]
+    except Exception as exc:
+        print("RAG ingestion error:", exc)
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+# =========================================================
+# LIBRARY / SEARCH / DELETE
+# =========================================================
+
+@app.get("/rag/library")
+def rag_library():
+    if not rag_store.configured:
+        return {
+            "configured": False,
+            "documents": [],
+        }
+
+    try:
+        documents = rag_store.list_documents()
+        return {
+            "configured": True,
+            "count": len(documents),
+            "documents": documents,
+        }
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.post("/rag/search")
+def rag_search(request: RagSearchRequest):
+    if not rag_store.configured:
+        return {
+            "configured": False,
+            "results": [],
+        }
+
+    try:
+        results = rag_store.search(
+            request.query,
+            categories=request.categories,
+            top_k=request.top_k,
+        )
+        return {
+            "configured": True,
+            "query": request.query,
+            "results": public_sources(results),
+        }
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.delete("/rag/document/{doc_id}")
+def rag_delete_document(
+    doc_id: str,
+    x_dentora_admin_key: Optional[str] = Header(
+        default=None,
+        alias="X-Dentora-Admin-Key",
+    ),
+):
+    require_admin(x_dentora_admin_key)
+
+    if not rag_store.configured:
+        raise HTTPException(
+            status_code=503,
+            detail="Persistent RAG is not configured yet.",
+        )
+
+    try:
+        return rag_store.delete_document(doc_id)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Document not found.")
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+# =========================================================
+# CHAT
+# =========================================================
+
+@app.post("/chat")
+def chat(request: ChatRequest):
+    message = request.message.strip()
+
+    if not message:
+        raise HTTPException(status_code=400, detail="Message cannot be empty.")
+
+    retrieved_sources: List[Dict[str, Any]] = []
+    rag_warning = ""
+
+    # Temporary PDF Tutor source
+    session_pdf = session_pdfs.get(request.session_id)
+
+    if session_pdf:
+        for item in find_relevant_session_chunks(
+            message,
+            session_pdf.get("chunks", []),
+            max_chunks=4,
+        ):
+            retrieved_sources.append({
+                "score": 1.0,
+                "combined_score": 1.0,
+                "doc_id": f"session:{request.session_id}",
+                "filename": session_pdf.get("name", "Uploaded PDF"),
+                "title": session_pdf.get("name", "Uploaded PDF"),
+                "category": "Uploaded PDF",
+                "page": item.get("page", 0),
+                "chunk_index": item.get("chunk_index", 0),
+                "text": item.get("text", ""),
+                "source_url": "",
+            })
+
+    # Persistent library
+    if request.use_library and rag_store.configured:
+        try:
+            library_sources = rag_store.search(
+                message,
+                categories=request.categories,
+                top_k=RAG_CONTEXT_CHUNKS,
             )
-        )
 
-        return {
+            existing = {
+                (
+                    source.get("filename", ""),
+                    source.get("page", 0),
+                    source.get("text", "")[:80],
+                )
+                for source in retrieved_sources
+            }
 
-            "response":
-                response.choices[0].message.content,
+            for source in library_sources:
+                key = (
+                    source.get("filename", ""),
+                    source.get("page", 0),
+                    source.get("text", "")[:80],
+                )
+                if key not in existing:
+                    retrieved_sources.append(source)
+                    existing.add(key)
 
-            "provider":
-                "Groq"
+                if len(retrieved_sources) >= RAG_CONTEXT_CHUNKS:
+                    break
 
-        }
+        except Exception as exc:
+            print("RAG retrieval error:", exc)
+            rag_warning = str(exc)
 
-    except Exception as groq_error:
+    rag_used = bool(retrieved_sources)
+    knowledge_context = build_context(retrieved_sources)
 
-        print(
-            "Groq error:",
-            groq_error
-        )
+    if rag_used:
+        knowledge_rules = """
+DENTORA KNOWLEDGE-BASE RULES
+----------------------------
+The source excerpts below are the primary authority for this answer.
 
+1. Base claims primarily on the retrieved source excerpts.
+2. Preserve the source terminology, classifications, sequence, and distinctions.
+3. Cite source-backed statements using the exact labels [S1], [S2], etc.
+4. Never invent a source label, page number, quotation, or fact.
+5. If the retrieved material does not clearly support the requested point, explicitly say:
+   "This is not clearly covered in your uploaded resources."
+6. Only after that statement may you provide established supplementary BDS-level knowledge.
+7. Put supplementary material under:
+   "Additional background knowledge — not directly from your uploaded resources."
+8. Never present supplementary knowledge as if it came from the student's library.
+9. If sources disagree, state the difference instead of silently reconciling them.
+10. Use well-formed Markdown tables when a table improves clarity.
+"""
+    else:
+        knowledge_rules = """
+DENTORA KNOWLEDGE-BASE RULES
+----------------------------
+No relevant uploaded/library source was retrieved.
 
-    # =========================
-    # QWEN API FALLBACK
-    # =========================
+Start by stating:
+"This is not clearly covered in your uploaded resources."
 
-    try:
+You may then answer from established BDS-level knowledge under:
+"Additional background knowledge — not directly from your uploaded resources."
 
-        response = (
-            qwen_client.chat.completions.create(
-                model="qwen-plus",
-                messages=[
-                    {
-                        "role": "user",
-                        "content": prompt
-                    }
-                ]
-            )
-        )
+Do not imply that background knowledge came from the student's library.
+"""
 
-        return {
+    prompt = f"""
+You are Dentora by Ehsan — an evidence-grounded BDS study assistant.
 
-            "response":
-                response.choices[0].message.content,
+STUDENT LEVEL
+-------------
+Final-year BDS.
 
-            "provider":
-                "Qwen API"
+CURRENT MODE
+------------
+{request.mode}
 
-        }
+STUDENT'S QUESTION
+------------------
+{message}
 
-    except Exception as qwen_error:
+{knowledge_rules}
 
-        print(
-            "Qwen API error:",
-            qwen_error
-        )
+RETRIEVED SOURCE EXCERPTS
+-------------------------
+{knowledge_context}
 
+MODE-SPECIFIC INSTRUCTIONS
+--------------------------
+- Study Chat: explain clearly, clinically, and exam-relevantly.
+- MCQ Mode: create or explain one-best-answer questions with concise reasoning.
+- Viva Mode: prioritize short examiner-ready answers, then key follow-up points.
+- OSCE Mode: structure answers around station steps, identification, findings, interpretation, safety, and examiner prompts.
+- PDF Tutor: stay especially strict to uploaded/retrieved material.
 
-    # =========================
-    # LOCAL OLLAMA FALLBACK
-    # =========================
+GENERAL PRESENTATION
+--------------------
+- Answer at final-year BDS level.
+- Use clear headings, bullets, and Markdown tables when useful.
+- Keep facts precise.
+- Do not fabricate references.
+- Do not unnecessarily repeat the question.
 
-    try:
+Answer now.
+"""
 
-        response = ollama.chat(
+    generated = generate_with_fallback(prompt)
+    generated["rag_used"] = rag_used
+    generated["rag_configured"] = rag_store.configured
+    generated["sources"] = public_sources(retrieved_sources)
 
-            model="qwen3:8b",
+    if rag_warning:
+        generated["rag_warning"] = rag_warning
 
-            messages=[
-                {
-                    "role": "user",
-                    "content": prompt
-                }
-            ]
-
-        )
-
-        return {
-
-            "response":
-                response["message"]["content"],
-
-            "provider":
-                "Local Qwen"
-
-        }
-
-    except Exception as ollama_error:
-
-        print(
-            "Ollama error:",
-            ollama_error
-        )
-
-        return {
-
-            "response":
-                "Dentora couldn't connect to the AI service. Please try again.",
-
-            "provider":
-                "Error"
-
-        }
+    return generated

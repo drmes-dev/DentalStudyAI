@@ -11,3 +11,4 @@ packaging
 ollama
 python-multipart
 pytesseract
+pinecone
