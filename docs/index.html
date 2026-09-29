@@ -231,6 +231,13 @@ body {
         0 0 34px rgba(103,232,249,.11);
 }
 
+.brand-logo svg {
+    width: 25px;
+    height: 25px;
+    color: #dffcff;
+    filter: drop-shadow(0 0 8px rgba(103,232,249,.18));
+}
+
 .brand-text h1 {
     margin: 0;
     font-size: 17px;
@@ -880,24 +887,134 @@ body {
 ========================= */
 
 .welcome {
+    position: relative;
     flex: 1;
+    min-height: 0;
     overflow-y: auto;
+    overflow-x: hidden;
 
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
+    display: block;
 
-    padding: 40px 24px;
+    padding: 18px 24px 26px;
+
+    scroll-padding-top: 18px;
+}
+
+.welcome::before {
+    content: "";
+    position: absolute;
+    left: 50%;
+    top: 8%;
+
+    width: min(760px, 78vw);
+    height: 360px;
+
+    transform: translateX(-50%);
+
+    background:
+        radial-gradient(
+            ellipse at center,
+            rgba(103,232,249,.095),
+            rgba(99,102,241,.055) 38%,
+            transparent 72%
+        );
+
+    filter: blur(20px);
+    opacity: .9;
+    pointer-events: none;
+}
+
+.welcome::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    top: 34px;
+
+    width: min(900px, 88%);
+    height: 1px;
+
+    transform: translateX(-50%);
+
+    background:
+        linear-gradient(
+            90deg,
+            transparent,
+            rgba(103,232,249,.14),
+            rgba(129,140,248,.12),
+            transparent
+        );
+
+    pointer-events: none;
 }
 
 .welcome.hidden {
     display: none;
 }
 
+.welcome-inner {
+    position: relative;
+    z-index: 1;
+
+    width: min(860px, 100%);
+    min-height: 100%;
+    margin: 0 auto;
+
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+
+    padding: 22px 0 28px;
+}
+
+.hero-kicker {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+
+    margin-bottom: 13px;
+    padding: 6px 10px;
+
+    border: 1px solid rgba(103,232,249,.14);
+    border-radius: 999px;
+
+    background:
+        linear-gradient(
+            135deg,
+            rgba(103,232,249,.055),
+            rgba(129,140,248,.05)
+        );
+
+    color: #8fb5cb;
+    font-size: 9px;
+    font-weight: 760;
+    letter-spacing: .11em;
+    text-transform: uppercase;
+
+    box-shadow:
+        inset 0 1px 0 rgba(255,255,255,.035),
+        0 8px 24px rgba(0,0,0,.08);
+
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+}
+
+.hero-kicker-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 999px;
+
+    background: #67e8f9;
+
+    box-shadow:
+        0 0 12px rgba(103,232,249,.75);
+}
+
 .welcome-logo {
-    width: 74px;
-    height: 74px;
+    position: relative;
+
+    width: 76px;
+    height: 76px;
 
     display: flex;
     align-items: center;
@@ -905,21 +1022,56 @@ body {
 
     border-radius: 24px;
 
-    font-size: 34px;
+    color: #dffcff;
 
     background:
         linear-gradient(
-            135deg,
-            rgba(103,232,249,.14),
-            rgba(129,140,248,.14)
+            145deg,
+            rgba(19,51,73,.94),
+            rgba(14,30,58,.92)
         );
 
-    border: 1px solid rgba(103,232,249,.18);
+    border: 1px solid rgba(103,232,249,.28);
 
     box-shadow:
-        0 0 70px rgba(103,232,249,.08);
+        inset 0 1px 0 rgba(255,255,255,.08),
+        0 18px 48px rgba(0,0,0,.24),
+        0 0 44px rgba(103,232,249,.12);
 
-    animation: logoFloat 4s ease-in-out infinite;
+    animation: logoFloat 5s ease-in-out infinite;
+}
+
+.welcome-logo::before {
+    content: "";
+    position: absolute;
+    inset: -8px;
+
+    border-radius: 30px;
+    border: 1px solid rgba(103,232,249,.08);
+
+    box-shadow:
+        0 0 40px rgba(103,232,249,.07);
+
+    pointer-events: none;
+}
+
+.welcome-logo::after {
+    content: "";
+    position: absolute;
+    inset: 7px;
+
+    border-radius: 18px;
+    border: 1px solid rgba(255,255,255,.035);
+
+    pointer-events: none;
+}
+
+.welcome-logo svg {
+    width: 39px;
+    height: 39px;
+
+    filter:
+        drop-shadow(0 0 10px rgba(103,232,249,.22));
 }
 
 @keyframes logoFloat {
@@ -928,38 +1080,52 @@ body {
     }
 
     50% {
-        transform: translateY(-7px);
+        transform: translateY(-5px);
     }
 }
 
 .welcome h2 {
-    margin: 22px 0 8px;
-    font-size: 29px;
-    letter-spacing: -.8px;
+    margin: 20px 0 8px;
+
+    color: #f4f8ff;
+
+    font-size: clamp(27px, 3.25vw, 38px);
+    font-weight: 780;
+    line-height: 1.08;
+    letter-spacing: -1.15px;
+    text-align: center;
+
+    text-shadow:
+        0 10px 34px rgba(0,0,0,.24);
 }
 
 .welcome h2 span {
     background:
         linear-gradient(
             90deg,
-            var(--accent),
-            var(--accent2)
+            #7defff 0%,
+            #66c9ff 48%,
+            #9b9cff 100%
         );
 
     -webkit-background-clip: text;
     background-clip: text;
     color: transparent;
+
+    filter:
+        drop-shadow(0 0 16px rgba(103,232,249,.08));
 }
 
 .welcome p {
-    max-width: 520px;
+    max-width: 590px;
     text-align: center;
 
     margin: 0;
 
-    color: var(--muted);
+    color: #89a0b8;
     font-size: 13px;
-    line-height: 1.7;
+    line-height: 1.72;
+    letter-spacing: .005em;
 }
 
 /* Suggestion cards */
@@ -978,8 +1144,8 @@ body {
     isolation: isolate;
     overflow: hidden;
 
-    min-height: 82px;
-    padding: 14px 15px;
+    min-height: 84px;
+    padding: 15px 16px;
 
     display: flex;
     align-items: center;
@@ -987,22 +1153,23 @@ body {
 
     text-align: left;
 
-    border: 1px solid rgba(103,232,249,.14);
-    border-radius: 18px;
+    border: 1px solid rgba(103,232,249,.16);
+    border-radius: 19px;
 
     background:
         linear-gradient(
             135deg,
-            rgba(12, 28, 49, .76),
-            rgba(10, 18, 36, .62)
+            rgba(12, 30, 51, .82),
+            rgba(10, 18, 38, .68)
         );
 
     color: var(--text);
     cursor: pointer;
 
     box-shadow:
-        inset 0 1px 0 rgba(255,255,255,.045),
-        0 12px 32px rgba(0,0,0,.16);
+        inset 0 1px 0 rgba(255,255,255,.05),
+        0 14px 34px rgba(0,0,0,.18),
+        0 0 0 1px rgba(255,255,255,.01);
 
     backdrop-filter: blur(14px);
     -webkit-backdrop-filter: blur(14px);
@@ -1829,6 +1996,108 @@ a.source-card:hover {
     margin-top: 8px;
 }
 
+
+@media (max-height: 690px) and (min-width: 761px) {
+
+    .welcome {
+        padding-top: 10px;
+        padding-bottom: 16px;
+    }
+
+    .welcome-inner {
+        justify-content: flex-start;
+        padding-top: 16px;
+        padding-bottom: 20px;
+    }
+
+    .hero-kicker {
+        margin-bottom: 9px;
+        padding: 5px 9px;
+        font-size: 8px;
+    }
+
+    .welcome-logo {
+        width: 58px;
+        height: 58px;
+        border-radius: 19px;
+    }
+
+    .welcome-logo::before {
+        inset: -6px;
+        border-radius: 24px;
+    }
+
+    .welcome-logo svg {
+        width: 30px;
+        height: 30px;
+    }
+
+    .welcome h2 {
+        margin-top: 14px;
+        margin-bottom: 6px;
+        font-size: 27px;
+    }
+
+    .welcome p {
+        font-size: 11.5px;
+        line-height: 1.55;
+    }
+
+    .suggestions {
+        margin-top: 19px;
+        gap: 10px;
+    }
+
+    .suggestion {
+        min-height: 66px;
+        padding: 10px 12px;
+        border-radius: 16px;
+    }
+
+    .suggestion-icon {
+        width: 36px;
+        height: 36px;
+        border-radius: 12px;
+        font-size: 15px;
+    }
+
+    .suggestion-title {
+        font-size: 11px;
+    }
+
+    .suggestion-text {
+        margin-top: 2px;
+        font-size: 9px;
+    }
+
+    .composer-area {
+        padding-top: 7px;
+        padding-bottom: 11px;
+    }
+
+    .composer {
+        padding: 8px;
+        border-radius: 20px;
+    }
+
+    .attach-button,
+    .send-button {
+        width: 42px;
+        height: 42px;
+        border-radius: 14px;
+    }
+
+    #messageInput {
+        min-height: 42px;
+        padding-top: 10px;
+        padding-bottom: 10px;
+    }
+
+    .input-hint {
+        margin-top: 5px;
+    }
+}
+
 /* =========================
    MOBILE
 ========================= */
@@ -1888,7 +2157,16 @@ a.source-card:hover {
     }
 
     .welcome {
-        padding: 30px 18px;
+        padding: 16px 18px 24px;
+    }
+
+    .welcome-inner {
+        justify-content: flex-start;
+        padding-top: 18px;
+    }
+
+    .hero-kicker {
+        margin-bottom: 10px;
     }
 
     .welcome h2 {
@@ -2050,7 +2328,26 @@ a.source-card:hover {
         <div class="brand">
 
             <div class="brand-logo">
-                🦷
+                <svg
+                    viewBox="0 0 64 64"
+                    fill="none"
+                    aria-hidden="true"
+                >
+                    <path
+                        d="M18.7 8.5C23 6.8 27.1 8 32 10.4C36.9 8 41 6.8 45.3 8.5C52.4 11.4 55.8 19.3 53.5 27.1C52.1 31.9 49.9 35.8 48.3 40.4C46.2 46.5 45.3 55 40.7 56C36.8 56.8 35.2 50 34.1 45.5C33.6 43.5 32.9 41 32 41C31.1 41 30.4 43.5 29.9 45.5C28.8 50 27.2 56.8 23.3 56C18.7 55 17.8 46.5 15.7 40.4C14.1 35.8 11.9 31.9 10.5 27.1C8.2 19.3 11.6 11.4 18.7 8.5Z"
+                        stroke="currentColor"
+                        stroke-width="3"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                    />
+                    <path
+                        d="M23.5 14.5C26.3 15.7 29 16.4 32 16.4C35 16.4 37.7 15.7 40.5 14.5"
+                        stroke="currentColor"
+                        stroke-width="2.2"
+                        stroke-linecap="round"
+                        opacity=".65"
+                    />
+                </svg>
             </div>
 
             <div class="brand-text">
@@ -2275,8 +2572,34 @@ a.source-card:hover {
             id="welcome"
         >
 
+            <div class="welcome-inner">
+
+                <div class="hero-kicker">
+                    <span class="hero-kicker-dot"></span>
+                    <span>Evidence-grounded BDS study workspace</span>
+                </div>
+
             <div class="welcome-logo">
-                🦷
+                <svg
+                    viewBox="0 0 64 64"
+                    fill="none"
+                    aria-hidden="true"
+                >
+                    <path
+                        d="M18.7 8.5C23 6.8 27.1 8 32 10.4C36.9 8 41 6.8 45.3 8.5C52.4 11.4 55.8 19.3 53.5 27.1C52.1 31.9 49.9 35.8 48.3 40.4C46.2 46.5 45.3 55 40.7 56C36.8 56.8 35.2 50 34.1 45.5C33.6 43.5 32.9 41 32 41C31.1 41 30.4 43.5 29.9 45.5C28.8 50 27.2 56.8 23.3 56C18.7 55 17.8 46.5 15.7 40.4C14.1 35.8 11.9 31.9 10.5 27.1C8.2 19.3 11.6 11.4 18.7 8.5Z"
+                        stroke="currentColor"
+                        stroke-width="3"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                    />
+                    <path
+                        d="M23.5 14.5C26.3 15.7 29 16.4 32 16.4C35 16.4 37.7 15.7 40.5 14.5"
+                        stroke="currentColor"
+                        stroke-width="2.2"
+                        stroke-linecap="round"
+                        opacity=".65"
+                    />
+                </svg>
             </div>
 
             <h2>
@@ -2367,6 +2690,8 @@ a.source-card:hover {
                         </div>
                     </div>
                 </button>
+
+            </div>
 
             </div>
 
@@ -2537,7 +2862,7 @@ a.source-card:hover {
    DENTORA CONFIGURATION
 ========================================================= */
 
-window.DENTORA_BUILD = "2026-09-30-rag-v1";
+window.DENTORA_BUILD = "2026-09-30-premium-hero-v2";
 
 const API_BASE =
     "https://dentalstudyai.onrender.com";
