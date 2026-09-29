@@ -11,4 +11,4 @@ packaging
 ollama
 python-multipart
 pytesseract
-pinecone
+pinecone>=9,<10
