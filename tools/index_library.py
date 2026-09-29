@@ -1,4 +1,4 @@
-"""
+r"""
 Dentora zero-cost local library indexer.
 
 Use this for large or scanned PDFs so Render does not need to OCR

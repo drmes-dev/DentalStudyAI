@@ -28,10 +28,10 @@ jobs:
           import re
 
           html = Path("docs/index.html").read_text(encoding="utf-8")
-          match = re.search(r"<script>([\\s\\S]*?)</script>", html)
-          if not match:
+          if "<script>" not in html or "</script>" not in html:
               raise SystemExit("No script block found")
-          Path("/tmp/dentora-frontend.js").write_text(match.group(1), encoding="utf-8")
+          script = html.split("<script>", 1)[1].split("</script>", 1)[0]
+          Path("/tmp/dentora-frontend.js").write_text(script, encoding="utf-8")
           PY
 
       - name: Check frontend JavaScript syntax
