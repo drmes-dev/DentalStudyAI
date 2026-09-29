@@ -792,38 +792,213 @@ body {
 
     display: grid;
     grid-template-columns: repeat(2, 1fr);
-    gap: 10px;
+    gap: 12px;
 }
 
 .suggestion {
-    padding: 15px;
+    position: relative;
+    isolation: isolate;
+    overflow: hidden;
+
+    min-height: 82px;
+    padding: 14px 15px;
+
+    display: flex;
+    align-items: center;
+    gap: 13px;
+
     text-align: left;
 
-    border: 1px solid var(--border);
-    background: rgba(255,255,255,.025);
-    border-radius: 15px;
+    border: 1px solid rgba(103,232,249,.14);
+    border-radius: 18px;
+
+    background:
+        linear-gradient(
+            135deg,
+            rgba(12, 28, 49, .76),
+            rgba(10, 18, 36, .62)
+        );
 
     color: var(--text);
     cursor: pointer;
 
-    transition: .22s ease;
+    box-shadow:
+        inset 0 1px 0 rgba(255,255,255,.045),
+        0 12px 32px rgba(0,0,0,.16);
+
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+
+    transition:
+        transform .2s ease,
+        border-color .2s ease,
+        box-shadow .2s ease,
+        background .2s ease;
+}
+
+.suggestion::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -2;
+
+    background:
+        radial-gradient(
+            circle at 12% 50%,
+            rgba(103,232,249,.13),
+            transparent 30%
+        ),
+        linear-gradient(
+            115deg,
+            transparent 24%,
+            rgba(129,140,248,.05) 44%,
+            rgba(103,232,249,.07) 56%,
+            transparent 74%
+        );
+
+    opacity: .65;
+    transition: opacity .2s ease;
+}
+
+.suggestion::after {
+    content: "";
+    position: absolute;
+    left: 14px;
+    right: 14px;
+    bottom: 0;
+    height: 1px;
+
+    background:
+        linear-gradient(
+            90deg,
+            transparent,
+            rgba(103,232,249,.55),
+            rgba(129,140,248,.5),
+            transparent
+        );
+
+    opacity: .38;
+    transition: opacity .2s ease;
 }
 
 .suggestion:hover {
-    background: rgba(255,255,255,.055);
-    border-color: rgba(103,232,249,.16);
-    transform: translateY(-2px);
+    transform: translateY(-3px);
+    border-color: rgba(103,232,249,.38);
+
+    background:
+        linear-gradient(
+            135deg,
+            rgba(16, 38, 63, .92),
+            rgba(11, 22, 43, .82)
+        );
+
+    box-shadow:
+        inset 0 1px 0 rgba(255,255,255,.065),
+        0 15px 38px rgba(0,0,0,.24),
+        0 0 24px rgba(103,232,249,.08);
+}
+
+.suggestion:hover::before {
+    opacity: 1;
+}
+
+.suggestion:hover::after {
+    opacity: .8;
+}
+
+.suggestion-icon {
+    position: relative;
+    flex-shrink: 0;
+
+    width: 42px;
+    height: 42px;
+    border-radius: 14px;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    color: #b8f5ff;
+    font-size: 18px;
+    font-weight: 800;
+    line-height: 1;
+
+    border: 1px solid rgba(103,232,249,.25);
+
+    background:
+        linear-gradient(
+            145deg,
+            rgba(103,232,249,.11),
+            rgba(129,140,248,.10)
+        );
+
+    box-shadow:
+        inset 0 1px 0 rgba(255,255,255,.05),
+        0 0 18px rgba(103,232,249,.06);
+
+    transition:
+        transform .2s ease,
+        border-color .2s ease,
+        box-shadow .2s ease;
+}
+
+.suggestion-icon::before {
+    content: "";
+    position: absolute;
+    inset: 5px;
+    border-radius: 9px;
+    border: 1px solid rgba(255,255,255,.04);
+}
+
+.suggestion:hover .suggestion-icon {
+    transform: scale(1.06) rotate(-2deg);
+    border-color: rgba(103,232,249,.48);
+
+    box-shadow:
+        inset 0 1px 0 rgba(255,255,255,.07),
+        0 0 22px rgba(103,232,249,.14);
+}
+
+.suggestion-copy {
+    min-width: 0;
 }
 
 .suggestion-title {
+    color: #edf7ff;
     font-size: 12px;
-    font-weight: 700;
+    font-weight: 750;
+    letter-spacing: .01em;
 }
 
 .suggestion-text {
-    color: var(--muted);
+    color: #8096ae;
     font-size: 10px;
-    margin-top: 5px;
+    line-height: 1.45;
+    margin-top: 4px;
+}
+
+.suggestion:hover .suggestion-title {
+    color: #ffffff;
+}
+
+.suggestion:hover .suggestion-text {
+    color: #a7bdd4;
+}
+
+.suggestion[data-card="clinical"] .suggestion-icon {
+    color: #7ef0ff;
+}
+
+.suggestion[data-card="mcq"] .suggestion-icon {
+    color: #adaaff;
+}
+
+.suggestion[data-card="viva"] .suggestion-icon {
+    color: #8cf4d2;
+}
+
+.suggestion[data-card="osce"] .suggestion-icon {
+    color: #86ddff;
 }
 
 /* =========================
@@ -1711,57 +1886,77 @@ body {
 
                 <button
                     class="suggestion"
+                    data-card="clinical"
                     type="button"
                     data-prompt="Explain the most important clinical points about trigeminal nerve lesions for a BDS exam."
                 >
-                    <div class="suggestion-title">
-                        🧠 Clinical concepts
-                    </div>
+                    <div class="suggestion-icon">✦</div>
 
-                    <div class="suggestion-text">
-                        Explain a difficult topic step by step.
+                    <div class="suggestion-copy">
+                        <div class="suggestion-title">
+                            Clinical concepts
+                        </div>
+
+                        <div class="suggestion-text">
+                            Explain a difficult topic step by step.
+                        </div>
                     </div>
                 </button>
 
                 <button
                     class="suggestion"
+                    data-card="mcq"
                     type="button"
                     data-prompt="Give me one difficult BDS-level MCQ on oral pathology. Ask me one question at a time."
                 >
-                    <div class="suggestion-title">
-                        🎯 Practice MCQs
-                    </div>
+                    <div class="suggestion-icon">◈</div>
 
-                    <div class="suggestion-text">
-                        Test your exam knowledge.
+                    <div class="suggestion-copy">
+                        <div class="suggestion-title">
+                            Practice MCQs
+                        </div>
+
+                        <div class="suggestion-text">
+                            Test your exam knowledge.
+                        </div>
                     </div>
                 </button>
 
                 <button
                     class="suggestion"
+                    data-card="viva"
                     type="button"
                     data-prompt="Start a rapid BDS viva session. Ask me one question at a time and wait for my answer."
                 >
-                    <div class="suggestion-title">
-                        🎤 Viva practice
-                    </div>
+                    <div class="suggestion-icon">◉</div>
 
-                    <div class="suggestion-text">
-                        Practice short oral answers.
+                    <div class="suggestion-copy">
+                        <div class="suggestion-title">
+                            Viva practice
+                        </div>
+
+                        <div class="suggestion-text">
+                            Practice short oral answers.
+                        </div>
                     </div>
                 </button>
 
                 <button
                     class="suggestion"
+                    data-card="osce"
                     type="button"
                     data-prompt="Start an OSCE station for a final-year BDS student. Give me the station instructions and ask me what I would do."
                 >
-                    <div class="suggestion-title">
-                        🩺 OSCE station
-                    </div>
+                    <div class="suggestion-icon">⬡</div>
 
-                    <div class="suggestion-text">
-                        Simulate clinical stations.
+                    <div class="suggestion-copy">
+                        <div class="suggestion-title">
+                            OSCE station
+                        </div>
+
+                        <div class="suggestion-text">
+                            Simulate clinical stations.
+                        </div>
                     </div>
                 </button>
 
