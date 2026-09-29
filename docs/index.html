@@ -310,7 +310,7 @@ body {
 
 .history {
     flex: 1;
-    min-height: 0;
+    min-height: 72px;
     overflow-y: auto;
     padding-right: 2px;
 }
@@ -768,15 +768,55 @@ body {
     padding-left: 20px;
 }
 
-.message-bubble table {
-    border-collapse: collapse;
+.table-scroll {
     width: 100%;
+    overflow-x: auto;
+    margin: 14px 0;
+    border: 1px solid rgba(103,232,249,.30);
+    border-radius: 12px;
+    background: rgba(3,10,20,.58);
+}
+
+.table-scroll::-webkit-scrollbar {
+    height: 6px;
+}
+
+.table-scroll::-webkit-scrollbar-thumb {
+    background: rgba(103,232,249,.26);
+    border-radius: 999px;
+}
+
+.message-bubble table {
+    width: 100%;
+    min-width: 620px;
+    border-collapse: collapse;
+    border-spacing: 0;
+    white-space: normal;
+    font-size: 12px;
+    line-height: 1.5;
 }
 
 .message-bubble th,
 .message-bubble td {
-    border: 1px solid var(--border-light);
-    padding: 7px;
+    border: 1px solid rgba(103,232,249,.28);
+    padding: 10px 11px;
+    text-align: left;
+    vertical-align: top;
+    color: var(--text);
+}
+
+.message-bubble th {
+    background: linear-gradient(135deg, rgba(103,232,249,.14), rgba(129,140,248,.18));
+    color: #f4f8ff;
+    font-weight: 750;
+}
+
+.message-bubble td {
+    background: rgba(8,20,36,.82);
+}
+
+.message-bubble tbody tr:nth-child(even) td {
+    background: rgba(12,27,47,.88);
 }
 
 /* Copy button */
@@ -1661,6 +1701,8 @@ body {
    DENTORA CONFIGURATION
 ========================================================= */
 
+window.DENTORA_BUILD = "2026-09-29-live-table-history-fix";
+
 const API_BASE =
     "https://dentalstudyai.onrender.com";
 
@@ -1906,88 +1948,102 @@ function escapeHtml(text) {
 }
 
 
-function formatAIText(text) {
 
-    let html =
-        escapeHtml(text);
+function formatInlineMarkdown(text) {
+    let html = escapeHtml(String(text));
+    html = html.replace(/&lt;br\s*\/?&gt;/gi, "<br>");
+    html = html.replace(/`([^`]+)`/g, "<code>$1</code>");
+    html = html.replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>");
+    html = html.replace(/(^|[^*])\*([^*\n]+)\*/g, "$1<em>$2</em>");
+    return html;
+}
 
+function splitMarkdownRow(line) {
+    const token = "@@DENTORA_ESCAPED_PIPE@@";
+    let row = String(line).trim().replace(/\\\|/g, token);
+    if (row.startsWith("|")) row = row.slice(1);
+    if (row.endsWith("|")) row = row.slice(0, -1);
+    return row.split("|").map(cell => cell.trim().replace(new RegExp(token, "g"), "|"));
+}
 
-    /* Code blocks */
+function isMarkdownTableDivider(line) {
+    if (!line || !String(line).includes("|")) return false;
+    const cells = splitMarkdownRow(line);
+    return cells.length >= 2 && cells.every(cell => /^:?-{3,}:?$/.test(cell.replace(/\s+/g, "")));
+}
 
-    html =
-        html.replace(
-            /```([\s\S]*?)```/g,
-            function(_, code) {
+function buildMarkdownTable(headerLine, bodyLines) {
+    const headers = splitMarkdownRow(headerLine);
+    const columnCount = headers.length;
+    const headerHtml = headers.map(cell => "<th>" + formatInlineMarkdown(cell) + "</th>").join("");
+    const rowsHtml = bodyLines.map(line => {
+        const cells = splitMarkdownRow(line);
+        while (cells.length < columnCount) cells.push("");
+        if (cells.length > columnCount) {
+            const overflow = cells.splice(columnCount - 1).join(" | ");
+            cells.push(overflow);
+        }
+        return "<tr>" + cells.map(cell => "<td>" + formatInlineMarkdown(cell) + "</td>").join("") + "</tr>";
+    }).join("");
+    return '<div class="table-scroll"><table><thead><tr>' + headerHtml + '</tr></thead><tbody>' + rowsHtml + '</tbody></table></div>';
+}
 
-                return (
-                    "<pre><code>" +
-                    code.trim() +
-                    "</code></pre>"
-                );
-
+function extractMarkdownTables(text) {
+    const lines = String(text).replace(/\r\n?/g, "\n").split("\n");
+    const tables = [];
+    const output = [];
+    for (let index = 0; index < lines.length; index++) {
+        const line = lines[index];
+        const divider = lines[index + 1];
+        if (line && line.includes("|") && isMarkdownTableDivider(divider)) {
+            const bodyLines = [];
+            let rowIndex = index + 2;
+            while (rowIndex < lines.length && lines[rowIndex].trim() !== "" && lines[rowIndex].includes("|")) {
+                bodyLines.push(lines[rowIndex]);
+                rowIndex++;
             }
-        );
+            const tableIndex = tables.length;
+            const token = "@@DENTORA_TABLE_" + tableIndex + "@@";
+            tables.push(buildMarkdownTable(line, bodyLines));
+            output.push(token);
+            index = rowIndex - 1;
+            continue;
+        }
+        output.push(line);
+    }
+    return { text: output.join("\n"), tables };
+}
 
+function formatAIText(text) {
+    let normalized = String(text || "").replace(/\r\n?/g, "\n");
+    const codeBlocks = [];
+    normalized = normalized.replace(/```(?:[a-zA-Z0-9_+-]+)?\n?([\s\S]*?)```/g, function(_, code) {
+        const index = codeBlocks.length;
+        codeBlocks.push("<pre><code>" + escapeHtml(code.trim()) + "</code></pre>");
+        return "@@DENTORA_CODE_" + index + "@@";
+    });
 
-    /* Inline code */
+    const parsedTables = extractMarkdownTables(normalized);
+    let html = escapeHtml(parsedTables.text);
 
-    html =
-        html.replace(
-            /`([^`]+)`/g,
-            "<code>$1</code>"
-        );
+    html = html.replace(/&lt;br\s*\/?&gt;/gi, "<br>");
+    html = html.replace(/`([^`]+)`/g, "<code>$1</code>");
+    html = html.replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>");
+    html = html.replace(/^###\s+(.*)$/gm, "<strong>$1</strong>");
+    html = html.replace(/^##\s+(.*)$/gm, "<strong>$1</strong>");
+    html = html.replace(/^#\s+(.*)$/gm, "<strong>$1</strong>");
+    html = html.replace(/^(?:-{3,}|\*{3,}|_{3,})$/gm, "<hr>");
+    html = html.replace(/^[•\-]\s+(.*)$/gm, "• $1");
+    html = html.replace(/\n/g, "<br>");
 
-
-    /* Bold */
-
-    html =
-        html.replace(
-            /\*\*(.*?)\*\*/g,
-            "<strong>$1</strong>"
-        );
-
-
-    /* Headings */
-
-    html =
-        html.replace(
-            /^### (.*)$/gm,
-            "<strong>$1</strong>"
-        );
-
-    html =
-        html.replace(
-            /^## (.*)$/gm,
-            "<strong>$1</strong>"
-        );
-
-    html =
-        html.replace(
-            /^# (.*)$/gm,
-            "<strong>$1</strong>"
-        );
-
-
-    /* Bullets */
-
-    html =
-        html.replace(
-            /^[•\-] (.*)$/gm,
-            "• $1"
-        );
-
-
-    /* New lines */
-
-    html =
-        html.replace(
-            /\n/g,
-            "<br>"
-        );
-
+    parsedTables.tables.forEach((tableHtml, index) => {
+        html = html.replace("@@DENTORA_TABLE_" + index + "@@", tableHtml);
+    });
+    codeBlocks.forEach((codeHtml, index) => {
+        html = html.replace("@@DENTORA_CODE_" + index + "@@", codeHtml);
+    });
 
     return html;
-
 }
 
 
@@ -2200,6 +2256,8 @@ function addMessage(
                 text
         });
 
+        saveCurrentChat();
+
     }
 
 }
@@ -2301,6 +2359,10 @@ function setMode(mode) {
 ========================================================= */
 
 function newChat() {
+
+    if (currentMessages.length > 0) {
+        saveCurrentChat();
+    }
 
     currentChatId =
         Date.now().toString();
@@ -3297,6 +3359,12 @@ function showPdfPanel() {
 loadHistory();
 
 renderHistory();
+
+window.addEventListener("beforeunload", function() {
+    if (currentMessages.length > 0) {
+        saveCurrentChat();
+    }
+});
 
 setMode(
     "study"
