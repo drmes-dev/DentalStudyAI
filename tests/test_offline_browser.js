@@ -55,11 +55,11 @@ async function main() {
     await assert.rejects(app.request('catalog','https://api/test/catalog'),/save a question pack/);
 
     const handlers = {}, cached = new Map(), unrelated = 'another-app-cache';
-    const cache = {addAll:async paths=>paths.forEach(path=>cached.set(path,new Response(path))),
+    const cache = {addAll:async paths=>paths.forEach(request=>cached.set(request.url,new Response(request.url))),
         match:async request=>cached.get(typeof request==='string'?request:request.url), put:async(request,response)=>cached.set(request.url,response)};
     const self = {location:{href:'https://example.org/DentalStudyAI/sw.js'},addEventListener:(name,fn)=>handlers[name]=fn,
         skipWaiting:async()=>{},clients:{claim:async()=>{}}};
-    vm.runInNewContext(fs.readFileSync(root+'/docs/sw.js','utf8'),{self,URL,Response,
+    vm.runInNewContext(fs.readFileSync(root+'/docs/sw.js','utf8'),{self,URL,Response,Request,
         caches:{open:async()=>cache,keys:async()=>['dentora-shell-v0',unrelated],delete:async key=>assert.notEqual(key,unrelated)},
         fetch:async()=>{throw new Error('offline');}});
     let task;

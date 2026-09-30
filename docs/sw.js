@@ -1,9 +1,10 @@
-const CACHE = 'dentora-shell-v1';
+const CACHE = 'dentora-shell-v2';
 const ROOT = new URL('./', self.location.href);
 const SHELL = ['./', './index.html', './offline.js', './manifest.webmanifest', './icon.svg',
     './about.html', './privacy.html', './terms.html'].map(path => new URL(path, ROOT).href);
 self.addEventListener('install', event => {
-    event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(SHELL)).then(() => self.skipWaiting()));
+    event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(SHELL.map(url => new Request(url, {cache: 'reload'}))))
+        .then(() => self.skipWaiting()));
 });
 self.addEventListener('activate', event => {
     event.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(key =>
@@ -17,7 +18,7 @@ self.addEventListener('fetch', event => {
     event.respondWith((async () => {
         const cache = await caches.open(CACHE);
         try {
-            const response = await fetch(event.request);
+            const response = await fetch(event.request, {cache: 'no-store'});
             if (response.ok) await cache.put(event.request, response.clone());
             return response;
         } catch (_) {
