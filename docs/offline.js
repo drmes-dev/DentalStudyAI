@@ -50,7 +50,9 @@
         const repeated = new Set(all.filter(q => q.repeat_count > 1).map(q => q.stem_hash));
         return {configured: true, offline: true, paper_count: value.papers.length,
             question_count: all.length, mcq_count: all.length, test_ready_questions: questions(value).length,
-            eligible_test_questions: questions(value).length, subjects: counts('subject'), years: counts('year'),
+            // Readiness coverage uses the whole saved bank, so tightening the
+            // answer-key filter does not falsely improve the readiness score.
+            eligible_test_questions: all.length, subjects: counts('subject'), years: counts('year'),
             topics: [...topics].map(([key, count]) => { const [subject, name] = JSON.parse(key); return {subject, name, count}; }),
             papers: value.papers, repeated_question_groups: repeated.size, review_pending_mcqs: 0};
     }

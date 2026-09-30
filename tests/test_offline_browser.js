@@ -32,6 +32,7 @@ async function main() {
     const catalog = await (await app.request('catalog','https://api/test/catalog')).json();
     assert.equal(catalog.question_count,3);
     assert.equal(catalog.test_ready_questions,2);
+    assert.equal(catalog.eligible_test_questions,3);
     const strict = await (await app.request('start','https://api/test/start',{body:JSON.stringify({count:10})})).json();
     assert.equal(strict.count,1); // Repeated stems are not repeated in the same test.
     assert.ok(['Actual source question?', 'Repeated source question?'].includes(strict.questions[0].stem));
