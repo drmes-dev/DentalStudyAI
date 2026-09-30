@@ -798,6 +798,190 @@ RULES
     return questions
 
 
+def _fallback_past_paper_subject(
+    filename: str,
+    title: str,
+) -> str:
+    value = f"{filename} {title}".lower()
+
+    mapping = (
+        (("ortho", "orthodont"), "Orthodontics"),
+        (("operative", "conservative"), "Operative Dentistry"),
+        (("endodont", "endo "), "Endodontics"),
+        (("oral surgery", "omfs", "maxillofacial"), "Oral & Maxillofacial Surgery"),
+        (("prostho", "prosthodont"), "Prosthodontics"),
+        (("periodont",), "Periodontology"),
+        (("oral path", "oral pathology"), "Oral Pathology"),
+        (("community", "public health"), "Community Dentistry"),
+        (("medicine",), "General Medicine"),
+        (("surgery",), "General Surgery"),
+    )
+
+    for cues, subject in mapping:
+        if any(cue in value for cue in cues):
+            return subject
+
+    return "BDS Past Paper"
+
+
+def infer_existing_past_paper_metadata(
+    document: Dict[str, Any],
+    pages: List[Dict[str, Any]],
+) -> Dict[str, Any]:
+    filename = normalize_text(
+        document.get("filename", "")
+    )
+    title = normalize_text(
+        document.get("title", "")
+    )
+
+    sample_parts = []
+    sample_length = 0
+
+    for page in pages[:20]:
+        text = normalize_text(
+            page.get("text", "")
+        )
+
+        if not text:
+            continue
+
+        block = (
+            f"--- PDF PAGE {int(page.get('page', 0))} ---\n"
+            f"{text}"
+        )
+
+        if sample_length + len(block) > 12000:
+            remaining = max(
+                0,
+                12000 - sample_length,
+            )
+
+            if remaining:
+                sample_parts.append(
+                    block[:remaining]
+                )
+            break
+
+        sample_parts.append(block)
+        sample_length += len(block)
+
+    forced_past_paper = (
+        str(
+            document.get("category", "")
+        ).strip().lower()
+        in {
+            "past papers",
+            "past paper",
+        }
+    )
+
+    prompt = f"""
+Determine whether this already-indexed Dentora document is a BDS past
+examination paper or past-paper compilation and identify its metadata.
+
+FILENAME
+--------
+{filename}
+
+STORED TITLE
+------------
+{title}
+
+STORED CATEGORY
+---------------
+{document.get("category", "")}
+
+DOCUMENT SAMPLE
+---------------
+{chr(10).join(sample_parts)}
+
+Return ONLY one JSON object:
+{{
+  "is_past_paper": true,
+  "subject": "canonical BDS subject name",
+  "year": "year if evident, otherwise Unknown",
+  "title": "concise paper title"
+}}
+
+RULES
+-----
+1. A real past paper contains examination questions, MCQs, EMQs, essays,
+   short-answer questions, OSCE stations, or an answer key from an exam.
+2. Do not classify ordinary textbook prose as a past paper.
+3. Infer the subject from the document itself when possible.
+4. Do not invent a year. Use "Unknown" if no year is supported.
+5. Return JSON only.
+"""
+
+    generated = generate_with_fallback(prompt)
+
+    fallback_subject = _fallback_past_paper_subject(
+        filename,
+        title,
+    )
+
+    result = {
+        "is_past_paper": forced_past_paper,
+        "subject": fallback_subject,
+        "year": "Unknown",
+        "title": (
+            title
+            or os.path.splitext(filename)[0]
+            or "Past Paper"
+        ),
+    }
+
+    if generated.get("provider") == "Error":
+        return result
+
+    try:
+        parsed = _json_payload(
+            generated.get("response", ""),
+            "object",
+        )
+    except Exception as exc:
+        print(
+            "Past-paper metadata inference warning:",
+            exc,
+        )
+        return result
+
+    if not isinstance(parsed, dict):
+        return result
+
+    result["is_past_paper"] = (
+        forced_past_paper
+        or bool(
+            parsed.get(
+                "is_past_paper",
+                False,
+            )
+        )
+    )
+
+    subject = normalize_text(
+        parsed.get("subject", "")
+    )[:160]
+
+    year = normalize_text(
+        parsed.get("year", "")
+    )[:40]
+
+    inferred_title = normalize_text(
+        parsed.get("title", "")
+    )[:300]
+
+    if subject:
+        result["subject"] = subject
+    if year:
+        result["year"] = year
+    if inferred_title:
+        result["title"] = inferred_title
+
+    return result
+
+
 def cross_check_past_paper_question(
     question: Dict[str, Any],
 ) -> Dict[str, Any]:
@@ -948,7 +1132,7 @@ STRICT RULES
 def root():
     return {
         "message": "Dentora backend is running.",
-        "version": "2.3.0-test-engine-beta",
+        "version": "2.3.1-legacy-paper-import",
     }
 
 
@@ -1534,6 +1718,246 @@ async def ingest_past_paper(
             status_code=500,
             detail="Dentora could not structure this past paper.",
         ) from exc
+
+
+@app.post("/past-papers/import-existing")
+def import_existing_past_paper(
+    request: Request,
+    x_dentora_beta_key: Optional[str] = Header(
+        default=None,
+        alias="X-Dentora-Beta-Key",
+    ),
+):
+    """Migrate one already-indexed RAG past paper into Test Mode.
+
+    This prevents owners from having to upload the same PDF twice. Each call
+    imports at most one paper so Render requests remain bounded; the frontend
+    repeats the call until no eligible legacy papers remain.
+    """
+    require_owner_access(
+        x_dentora_beta_key
+    )
+
+    enforce_rate_limit(
+        request,
+        "past-paper-import-existing",
+        20,
+        60 * 60,
+    )
+
+    if not (
+        rag_store.configured
+        and past_paper_store.configured
+    ):
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "Persistent RAG/question-bank storage is not configured."
+            ),
+        )
+
+    existing_ids = {
+        str(
+            paper.get(
+                "paper_id",
+                "",
+            )
+        )
+        for paper in past_paper_store.list_papers()
+    }
+
+    documents = rag_store.list_documents()
+
+    strong_candidates = []
+    fallback_candidates = []
+
+    cue_pattern = re.compile(
+        r"(past\s*paper|question\s*paper|annual\s*(exam|examination)|"
+        r"supply\s*(exam|examination)|professional\s*(exam|examination)|"
+        r"university\s*(exam|examination))",
+        re.IGNORECASE,
+    )
+
+    for document in documents:
+        doc_id = str(
+            document.get(
+                "doc_id",
+                "",
+            )
+        ).strip()
+
+        if (
+            not doc_id
+            or doc_id in existing_ids
+        ):
+            continue
+
+        category = str(
+            document.get(
+                "category",
+                "",
+            )
+        ).strip().lower()
+
+        name_text = (
+            f"{document.get('filename', '')} "
+            f"{document.get('title', '')}"
+        )
+
+        if category in {
+            "past papers",
+            "past paper",
+        }:
+            strong_candidates.append(
+                document
+            )
+        elif cue_pattern.search(name_text):
+            fallback_candidates.append(
+                document
+            )
+
+    candidates = (
+        strong_candidates
+        + fallback_candidates
+    )
+
+    if not candidates:
+        return {
+            "success": True,
+            "imported": False,
+            "message": (
+                "No unimported past-paper documents were found "
+                "in the existing RAG library."
+            ),
+        }
+
+    for document in candidates:
+        doc_id = str(
+            document.get(
+                "doc_id",
+                "",
+            )
+        ).strip()
+
+        try:
+            pages = rag_store.document_pages(
+                doc_id
+            )
+
+            if not pages:
+                continue
+
+            metadata = (
+                infer_existing_past_paper_metadata(
+                    document,
+                    pages,
+                )
+            )
+
+            if not metadata.get(
+                "is_past_paper"
+            ):
+                continue
+
+            subject = normalize_text(
+                metadata.get(
+                    "subject",
+                    "",
+                )
+            )[:160]
+
+            if not subject:
+                subject = (
+                    _fallback_past_paper_subject(
+                        document.get(
+                            "filename",
+                            "",
+                        ),
+                        document.get(
+                            "title",
+                            "",
+                        ),
+                    )
+                )
+
+            questions = (
+                parse_past_paper_questions(
+                    pages=pages,
+                    subject=subject,
+                )
+            )
+
+            questions = (
+                canonicalize_past_paper_topics(
+                    questions,
+                    subject,
+                )
+            )
+
+            if not questions:
+                print(
+                    "Legacy past-paper import found no questions:",
+                    doc_id,
+                )
+                continue
+
+            result = (
+                past_paper_store.index_paper(
+                    paper_id=doc_id,
+                    title=metadata.get(
+                        "title",
+                        "",
+                    )
+                    or document.get(
+                        "title",
+                        "",
+                    )
+                    or document.get(
+                        "filename",
+                        "",
+                    ),
+                    subject=subject,
+                    year=metadata.get(
+                        "year",
+                        "Unknown",
+                    )
+                    or "Unknown",
+                    filename=document.get(
+                        "filename",
+                        "",
+                    ),
+                    questions=questions,
+                    replace_existing=True,
+                )
+            )
+
+            result.update({
+                "imported": True,
+                "source": "existing_rag_library",
+                "original_category": document.get(
+                    "category",
+                    "",
+                ),
+            })
+
+            return result
+
+        except Exception as exc:
+            print(
+                "Existing past-paper import warning:",
+                doc_id,
+                exc,
+            )
+            continue
+
+    return {
+        "success": True,
+        "imported": False,
+        "message": (
+            "Past-paper candidates were found, but Dentora could not "
+            "structure readable questions from them."
+        ),
+    }
 
 
 @app.post("/past-papers/{paper_id}/verify")
