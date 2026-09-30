@@ -143,6 +143,12 @@ class TestGradeRequest(BaseModel):
     responses: List[Dict[str, str]] = Field(default_factory=list)
 
 
+class ImportRagPastPaperRequest(BaseModel):
+    subject: Optional[str] = Field(default=None, max_length=160)
+    year: Optional[str] = Field(default=None, max_length=40)
+    title: Optional[str] = Field(default=None, max_length=300)
+
+
 class ExistingPaperImportRequest(BaseModel):
     subject: Optional[str] = Field(default=None, max_length=160)
     year: Optional[str] = Field(default=None, max_length=40)
@@ -1931,6 +1937,233 @@ def import_selected_rag_past_paper(
         ) from exc
 
 
+@app.get("/past-papers/rag-sources")
+def list_rag_sources_for_test_mode(
+    request: Request,
+    x_dentora_beta_key: Optional[str] = Header(
+        default=None,
+        alias="X-Dentora-Beta-Key",
+    ),
+):
+    require_owner_access(x_dentora_beta_key)
+    enforce_rate_limit(
+        request,
+        "past-paper-rag-sources",
+        30,
+        10 * 60,
+    )
+
+    documents = rag_store.list_documents()
+
+    def likely(document: Dict[str, Any]) -> bool:
+        category = str(
+            document.get("category", "")
+        ).strip().lower()
+
+        value = (
+            f"{document.get('filename', '')} "
+            f"{document.get('title', '')}"
+        ).lower()
+
+        if category in {
+            "past papers",
+            "past paper",
+        }:
+            return True
+
+        return bool(
+            re.search(
+                r"(past\s*paper|question\s*paper|annual\s*(exam|examination)|"
+                r"supply\s*(exam|examination)|professional\s*(exam|examination))",
+                value,
+                re.IGNORECASE,
+            )
+        )
+
+    return {
+        "count": len(documents),
+        "documents": [
+            {
+                "doc_id": str(document.get("doc_id", "")),
+                "filename": document.get("filename", ""),
+                "title": document.get("title", ""),
+                "category": document.get("category", ""),
+                "pages": int(document.get("pages", 0) or 0),
+                "chunks": int(document.get("chunks", 0) or 0),
+                "likely_past_paper": likely(document),
+                "already_in_test_bank": any(
+                    str(paper.get("paper_id", ""))
+                    == str(document.get("doc_id", ""))
+                    for paper in past_paper_store.list_papers()
+                ),
+            }
+            for document in documents
+        ],
+    }
+
+
+def structure_existing_rag_paper(
+    document: Dict[str, Any],
+    *,
+    subject_override: str = "",
+    year_override: str = "",
+    title_override: str = "",
+) -> Dict[str, Any]:
+    doc_id = str(
+        document.get("doc_id", "")
+    ).strip()
+
+    if not doc_id:
+        raise ValueError(
+            "The indexed document has no document ID."
+        )
+
+    pages = rag_store.document_pages(
+        doc_id
+    )
+
+    if not pages:
+        raise ValueError(
+            "Dentora could not reconstruct readable page text from this indexed PDF."
+        )
+
+    metadata = infer_existing_past_paper_metadata(
+        document,
+        pages,
+    )
+
+    subject = (
+        normalize_text(subject_override)
+        or normalize_text(
+            metadata.get("subject", "")
+        )
+        or _fallback_past_paper_subject(
+            document.get("filename", ""),
+            document.get("title", ""),
+        )
+    )[:160]
+
+    year = (
+        normalize_text(year_override)
+        or normalize_text(
+            metadata.get("year", "")
+        )
+        or "Unknown"
+    )[:40]
+
+    resolved_title = (
+        normalize_text(title_override)
+        or normalize_text(
+            metadata.get("title", "")
+        )
+        or normalize_text(
+            document.get("title", "")
+        )
+        or normalize_text(
+            document.get("filename", "")
+        )
+        or "Past Paper"
+    )[:300]
+
+    questions = parse_past_paper_questions(
+        pages=pages,
+        subject=subject,
+    )
+
+    questions = canonicalize_past_paper_topics(
+        questions,
+        subject,
+    )
+
+    if not questions:
+        raise ValueError(
+            "No clear examination questions could be structured from this indexed PDF."
+        )
+
+    result = past_paper_store.index_paper(
+        paper_id=doc_id,
+        title=resolved_title,
+        subject=subject,
+        year=year,
+        filename=document.get("filename", ""),
+        questions=questions,
+        replace_existing=True,
+    )
+
+    result.update({
+        "imported": True,
+        "source": "existing_rag_library",
+        "original_category": document.get(
+            "category",
+            "",
+        ),
+    })
+
+    return result
+
+
+@app.post("/past-papers/import-source/{doc_id}")
+def import_specific_rag_past_paper(
+    doc_id: str,
+    payload: ImportRagPastPaperRequest,
+    request: Request,
+    x_dentora_beta_key: Optional[str] = Header(
+        default=None,
+        alias="X-Dentora-Beta-Key",
+    ),
+):
+    require_owner_access(
+        x_dentora_beta_key
+    )
+
+    enforce_rate_limit(
+        request,
+        "past-paper-import-source",
+        20,
+        60 * 60,
+    )
+
+    document = next(
+        (
+            item
+            for item in rag_store.list_documents()
+            if str(item.get("doc_id", ""))
+            == str(doc_id)
+        ),
+        None,
+    )
+
+    if document is None:
+        raise HTTPException(
+            status_code=404,
+            detail="That RAG document was not found.",
+        )
+
+    try:
+        return structure_existing_rag_paper(
+            document,
+            subject_override=(
+                payload.subject or ""
+            ),
+            year_override=(
+                payload.year or ""
+            ),
+            title_override=(
+                payload.title or ""
+            ),
+        )
+    except Exception as exc:
+        print(
+            "Specific RAG past-paper import error:",
+            doc_id,
+            exc,
+        )
+        raise HTTPException(
+            status_code=422,
+            detail=str(exc),
+        ) from exc
+
+
 @app.post("/past-papers/import-existing")
 def import_existing_past_paper(
     request: Request,
@@ -2051,105 +2284,9 @@ def import_existing_past_paper(
         ).strip()
 
         try:
-            pages = rag_store.document_pages(
-                doc_id
+            result = structure_existing_rag_paper(
+                document
             )
-
-            if not pages:
-                continue
-
-            metadata = (
-                infer_existing_past_paper_metadata(
-                    document,
-                    pages,
-                )
-            )
-
-            if not metadata.get(
-                "is_past_paper"
-            ):
-                continue
-
-            subject = normalize_text(
-                metadata.get(
-                    "subject",
-                    "",
-                )
-            )[:160]
-
-            if not subject:
-                subject = (
-                    _fallback_past_paper_subject(
-                        document.get(
-                            "filename",
-                            "",
-                        ),
-                        document.get(
-                            "title",
-                            "",
-                        ),
-                    )
-                )
-
-            questions = (
-                parse_past_paper_questions(
-                    pages=pages,
-                    subject=subject,
-                )
-            )
-
-            questions = (
-                canonicalize_past_paper_topics(
-                    questions,
-                    subject,
-                )
-            )
-
-            if not questions:
-                print(
-                    "Legacy past-paper import found no questions:",
-                    doc_id,
-                )
-                continue
-
-            result = (
-                past_paper_store.index_paper(
-                    paper_id=doc_id,
-                    title=metadata.get(
-                        "title",
-                        "",
-                    )
-                    or document.get(
-                        "title",
-                        "",
-                    )
-                    or document.get(
-                        "filename",
-                        "",
-                    ),
-                    subject=subject,
-                    year=metadata.get(
-                        "year",
-                        "Unknown",
-                    )
-                    or "Unknown",
-                    filename=document.get(
-                        "filename",
-                        "",
-                    ),
-                    questions=questions,
-                    replace_existing=True,
-                )
-            )
-
-            result.update({
-                "imported": True,
-                "source": "existing_rag_library",
-                "original_category": document.get(
-                    "category",
-                    "",
-                ),
-            })
 
             return result
 
