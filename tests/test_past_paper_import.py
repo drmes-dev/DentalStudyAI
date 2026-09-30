@@ -142,7 +142,7 @@ class BackgroundImportTests(unittest.TestCase):
         with patch.object(main, 'import_next_existing_paper', side_effect=results):
             with patch.object(main.time, 'sleep') as delay:
                 main.paper_sync_worker()
-        self.assertEqual(delay.call_count, 1)
+        self.assertEqual([call.args[0] for call in delay.call_args_list], [15, 30])
         self.assertEqual(main._paper_sync_state['saved_batches'], 1)
         self.assertTrue(main._paper_sync_state['complete'])
         self.assertFalse(main._paper_sync_state['running'])

@@ -5380,14 +5380,22 @@ async function importExistingPastPapers(automatic = true) {
             }
             const progress = await response.json();
             lastPastPaperSyncMessage = progress.message || "Reading scanned MCQs…";
-            if (progress.retrying) lastPastPaperSyncMessage += " Automatic retry in progress; saved questions remain available.";
+            if (progress.retrying && progress.retry_at) {
+                const retryTime = new Date(Number(progress.retry_at) * 1000);
+                lastPastPaperSyncMessage += " Next automatic retry: " + retryTime.toLocaleString() + ".";
+            } else if (progress.retrying) {
+                lastPastPaperSyncMessage += " Automatic retry in progress; saved questions remain available.";
+            }
             ragPastPaperSyncStatus.textContent = lastPastPaperSyncMessage;
             if (savedBatches !== Number(progress.saved_batches || 0) || !progress.running) {
                 savedBatches = Number(progress.saved_batches || 0);
                 await loadTestCatalog(false);
             }
-            if (!progress.running) break;
-            await new Promise(resolve => setTimeout(resolve, 3000));
+            if (!progress.running) {
+                if (progress.complete) await repairExistingQuestionBank(testCatalog);
+                break;
+            }
+            await new Promise(resolve => setTimeout(resolve, progress.retrying ? 30000 : 3000));
             response = await fetch(API_BASE + "/past-papers/sync", {
                 headers: betaHeaders(false), cache: "no-store"
             });

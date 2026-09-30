@@ -32,6 +32,7 @@ from rag import (
     safe_category,
 )
 from test_engine import past_paper_store
+from ai_availability import AIUnavailable, ModelAvailability
 
 
 # =========================================================
@@ -439,86 +440,61 @@ def require_owner_access(supplied_key: Optional[str]):
 # AI GENERATION
 # =========================================================
 
-def generate_with_fallback(prompt: str, timeout_seconds: Optional[int] = None, json_response: bool = False) -> Dict[str, str]:
-    try:
-        response = gemini_client.models.generate_content(
-            model="gemini-3.5-flash",
-            contents=prompt,
-            **({"config": {"http_options": {
-                "timeout": timeout_seconds * 1000,
-                "retry_options": {"attempts": 1},
-            }, **({"response_mime_type": "application/json"} if json_response else {})}} if timeout_seconds else {}),
-        )
-        if response and response.text:
-            return {
-                "response": response.text,
-                "provider": "Gemini",
-            }
-    except Exception as exc:
-        print("Gemini error:", exc)
+model_availability = ModelAvailability()
 
-    try:
-        client = groq_client.with_options(timeout=timeout_seconds, max_retries=0) if timeout_seconds else groq_client
-        response = client.chat.completions.create(
-            model="openai/gpt-oss-120b",
-            messages=[{
-                "role": "user",
-                "content": prompt,
-            }],
-            **({"response_format": {"type": "json_object"}, "reasoning_effort": "low"} if json_response else {}),
-        )
-        text = response.choices[0].message.content
-        if text:
-            return {
-                "response": text,
-                "provider": "Groq",
-            }
-    except Exception as exc:
-        print("Groq error:", exc)
 
-    try:
-        client = qwen_client.with_options(timeout=timeout_seconds, max_retries=0) if timeout_seconds else qwen_client
-        response = client.chat.completions.create(
-            model="qwen-plus",
-            messages=[{
-                "role": "user",
-                "content": prompt,
-            }],
-            **({"response_format": {"type": "json_object"}} if json_response else {}),
-        )
-        text = response.choices[0].message.content
-        if text:
-            return {
-                "response": text,
-                "provider": "Qwen API",
-            }
-    except Exception as exc:
-        print("Qwen API error:", exc)
+def generate_with_fallback(prompt: str, timeout_seconds: Optional[int] = None, json_response: bool = False) -> Dict[str, Any]:
+    # Same configured keys, additional documented free-tier models. Paper
+    # extraction prefers Qwen, reserving the larger GPT model for chat.
+    groq_models = ("qwen/qwen3.8-27b", "openai/gpt-oss-20b", "openai/gpt-oss-120b") if json_response else (
+        "openai/gpt-oss-120b", "openai/gpt-oss-20b", "qwen/qwen3.8-27b")
+    models = [("Gemini", "gemini-3.5-flash")] + [("Groq", model) for model in groq_models] + [("Qwen API", "qwen-plus")]
+    timeout = timeout_seconds or 45
+    for provider, model in models:
+        if model_availability.remaining(provider, model):
+            continue
+        try:
+            if provider == "Gemini":
+                config = {"http_options": {"timeout": timeout * 1000, "retry_options": {"attempts": 1}}}
+                if json_response:
+                    config.update(response_mime_type="application/json", max_output_tokens=6000)
+                response = gemini_client.models.generate_content(model=model, contents=prompt, config=config)
+                if response and response.candidates and str(response.candidates[0].finish_reason).endswith("MAX_TOKENS"):
+                    raise ValueError("AI output truncated; page checkpoint must not advance")
+                content = response.text if response else ""
+            else:
+                base_client = groq_client if provider == "Groq" else qwen_client
+                client = base_client.with_options(timeout=timeout, max_retries=0)
+                options = {}
+                if json_response:
+                    options["response_format"] = {"type": "json_object"}
+                    if provider == "Groq":
+                        options.update(max_completion_tokens=6000, reasoning_effort="low")
+                    else:
+                        options["max_tokens"] = 6000
+                response = client.chat.completions.create(
+                    model=model, messages=[{"role": "user", "content": prompt}], **options)
+                if response.choices[0].finish_reason == "length":
+                    raise ValueError("AI output truncated; page checkpoint must not advance")
+                content = response.choices[0].message.content
+            if not content:
+                raise ValueError("AI returned no readable content")
+            if json_response:
+                _json_payload(content, "object")  # Try another model if output is malformed.
+            print(f"AI generation succeeded: {provider}/{model}")
+            return {"response": content, "provider": provider, "model": model}
+        except Exception as exc:
+            model_availability.failed(provider, model, exc)
 
-    if timeout_seconds:
-        return {"response": "Cloud AI providers are unavailable; retry this batch.", "provider": "Error"}
-
-    try:
-        response = ollama.chat(
-            model="qwen3:8b",
-            messages=[{
-                "role": "user",
-                "content": prompt,
-            }],
-        )
-        text = response.get("message", {}).get("content", "")
-        if text:
-            return {
-                "response": text,
-                "provider": "Local Qwen",
-            }
-    except Exception as exc:
-        print("Ollama error:", exc)
-
-    return {
-        "response": "Dentora couldn't connect to the AI service. Please try again.",
-        "provider": "Error",
-    }
+    if not timeout_seconds and os.getenv("DENTORA_LOCAL_AI", "").lower() == "true":
+        try:
+            response = ollama.chat(model="qwen3:8b", messages=[{"role": "user", "content": prompt}])
+            content = response.get("message", {}).get("content", "")
+            if content:
+                return {"response": content, "provider": "Local Qwen"}
+        except Exception:
+            print("Local AI unavailable")
+    return model_availability.unavailable(models)
 
 
 
@@ -716,10 +692,7 @@ RULES
         generated = generate_with_fallback(prompt, timeout_seconds=60, json_response=True)
 
         if generated.get("provider") == "Error":
-            raise RuntimeError(
-                "Dentora could not structure the past paper because no AI "
-                "provider was available."
-            )
+            raise AIUnavailable(generated)
 
         parsed = _json_payload(
             generated.get("response", ""),
@@ -1209,19 +1182,11 @@ empty verified_answer. Do not invent a missing option.
 """
 
         generated = generate_with_fallback(
-            fallback_prompt
+            fallback_prompt, timeout_seconds=60, json_response=True
         )
 
         if generated.get("provider") == "Error":
-            return {
-                "status": "insufficient",
-                "verified_answer": "",
-                "confidence": "low",
-                "rationale": (
-                    "No usable answer could be resolved automatically."
-                ),
-                "sources": [],
-            }
+            raise AIUnavailable(generated)
 
         try:
             parsed = _json_payload(
@@ -1314,10 +1279,10 @@ STRICT RULES
 4. Never invent a page, source, option, or answer.
 5. Keep the rationale concise and do not claim more than the excerpts support.
 """
-    generated = generate_with_fallback(prompt)
+    generated = generate_with_fallback(prompt, timeout_seconds=60, json_response=True)
 
     if generated.get("provider") == "Error":
-        raise RuntimeError("No AI provider was available for cross-checking.")
+        raise AIUnavailable(generated)
 
     parsed = _json_payload(
         generated.get("response", ""),
@@ -1432,7 +1397,7 @@ OCR is too damaged or the item is genuinely ambiguous, return an empty answer.
 def root():
     return {
         "message": "Dentora backend is running.",
-        "version": "2.5.0-d1-question-bank",
+        "version": "2.5.1-quota-aware-import",
     }
 
 
@@ -2696,6 +2661,11 @@ def import_next_existing_paper():
 
             return result
 
+        except AIUnavailable as exc:
+            # Availability is shared by all papers. Trying the next PDF would
+            # spend more quota without changing the cause, so retain this page.
+            return {"success": False, "imported": False, "retry_after": exc.retry_after,
+                    "error_code": exc.reason, "message": str(exc)}
         except Exception as exc:
             print(
                 "Existing past-paper import warning:",
@@ -2724,7 +2694,7 @@ def import_next_existing_paper():
     }
 
 
-# One worker per server; page checkpoints are stored persistently in Pinecone.
+# One worker per server; page checkpoints use the configured persistent bank.
 _paper_sync_lock = Lock()
 _paper_sync_state: Dict[str, Any] = {"running": False, "message": "", "saved_batches": 0}
 
@@ -2735,6 +2705,16 @@ def paper_sync_worker():
         for step in range(10000):
             result = import_next_existing_paper()
             if not result.get("success", False):
+                if result.get("retry_after"):
+                    delay = max(1, int(result["retry_after"]))
+                    retry_at = time.time() + delay
+                    with _paper_sync_lock:
+                        _paper_sync_state.update(message=result["message"], retrying=True, retry_at=retry_at)
+                    # A running server resumes automatically. Restarts resume
+                    # from persistent page checkpoints on the next sync call.
+                    while time.time() < retry_at:
+                        time.sleep(min(60, max(0.01, retry_at - time.time())))
+                    continue
                 failures += 1
                 delay = min(15 * (2 ** (failures - 1)), 60)
                 with _paper_sync_lock:
@@ -2753,7 +2733,9 @@ def paper_sync_worker():
                     message=f"{result.get('title', 'Past paper')} · {result.get('processed_pages', 0)}/{result.get('total_pages', 0)} pages processed · {result.get('question_count', 0)} questions saved.",
                     saved_batches=_paper_sync_state.get("saved_batches", 0) + 1,
                     retrying=False,
+                    retry_at=None,
                 )
+            time.sleep(30)  # Pace free-tier batch requests; chat remains usable.
     except Exception as exc:
         with _paper_sync_lock:
             _paper_sync_state.update(message=f"Import paused: {exc}. Refresh question bank to resume.")
@@ -2768,7 +2750,7 @@ def start_paper_sync(request: Request, x_dentora_beta_key: Optional[str] = Heade
     enforce_rate_limit(request, "past-paper-sync-start", 20, 3600)
     with _paper_sync_lock:
         if not _paper_sync_state["running"]:
-            _paper_sync_state.update(running=True, complete=False, retrying=False, message="Reading the next batch of scanned MCQs…", saved_batches=0)
+            _paper_sync_state.update(running=True, complete=False, retrying=False, retry_at=None, message="Reading the next batch of scanned MCQs…", saved_batches=0)
             Thread(target=paper_sync_worker, daemon=True).start()
         return dict(_paper_sync_state)
 
@@ -2799,6 +2781,10 @@ def verify_past_paper(
     )
 
     batch_size = max(1, min(int(batch_size), 6))
+    with _paper_sync_lock:
+        if _paper_sync_state["running"]:
+            return {"success": True, "processed": 0, "deferred": True,
+                    "message": "Answer review will resume after the paper import."}
     pending = past_paper_store.pending_questions(
         paper_id,
         limit=batch_size,
@@ -2822,6 +2808,9 @@ def verify_past_paper(
             )
             processed += 1
 
+        except AIUnavailable as exc:
+            return {"success": True, "processed": processed, "deferred": True,
+                    "retry_after": exc.retry_after, "message": str(exc)}
         except Exception as exc:
             print(
                 "Past-paper verification error:",
