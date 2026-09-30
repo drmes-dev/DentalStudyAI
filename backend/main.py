@@ -652,6 +652,14 @@ SOURCE PAPER TEXT
 -----------------
 {batch}
 
+IMPORTANT OCR NOTE
+------------------
+This text may come from scanned exam pages and OCR. Detect MCQs even when
+line breaks are messy, option labels are separated from option text, or
+characters such as A/B/C/D, 1/2/3/4, brackets, periods, and parentheses are
+imperfectly recognized. Repair only obvious OCR spacing/line-break damage;
+do not invent missing question content.
+
 OUTPUT
 ------
 Return ONLY a JSON array. Each item must have exactly these fields:
@@ -679,9 +687,12 @@ RULES
    mcq, true_false, emq, short_answer, essay, osce, other.
 8. Do not convert headings, instructions, roll numbers, marks tables, or
    answer-key labels into questions.
-9. If a question is incomplete in this excerpt, include it only when its stem
-   and answer choices can be reconstructed directly from the supplied text.
-10. Return JSON only. No commentary and no Markdown.
+9. For scanned/OCR MCQs, join wrapped lines belonging to the same stem or
+   option. Accept recognizable option formats such as A., A), (A), a., 1.,
+   1), or (1), and preserve their labels in the options object.
+10. If a question is incomplete in this excerpt, include it only when its stem
+    and answer choices can be reconstructed directly from the supplied text.
+11. Return JSON only. No commentary and no Markdown.
 """
         generated = generate_with_fallback(prompt)
 
@@ -810,10 +821,49 @@ RULES
     return questions
 
 
+def canonical_bds_subject(
+    *values: str,
+) -> str:
+    text = " ".join(
+        normalize_text(value)
+        for value in values
+        if value
+    ).lower()
+
+    mappings = (
+        (("orthodont",), "Orthodontics"),
+        (("operative", "conservative dentistry", "restorative dentistry"), "Operative Dentistry"),
+        (("endodont",), "Endodontics"),
+        (("oral surgery", "maxillofacial", "omfs"), "Oral & Maxillofacial Surgery"),
+        (("prosthodont", "prostho"), "Prosthodontics"),
+        (("periodont", "perio"), "Periodontology"),
+        (("oral pathology", "oral path"), "Oral Pathology"),
+        (("community dentistry", "dental public health"), "Community Dentistry"),
+        (("pediatric", "paediatric", "pedodont"), "Pediatric Dentistry"),
+        (("oral medicine",), "Oral Medicine"),
+        (("general medicine",), "General Medicine"),
+        (("general surgery",), "General Surgery"),
+    )
+
+    for cues, canonical in mappings:
+        if any(cue in text for cue in cues):
+            return canonical
+
+    return ""
+
+
 def _fallback_past_paper_subject(
     filename: str,
     title: str,
 ) -> str:
+    canonical = canonical_bds_subject(
+        filename,
+        title,
+    )
+
+    if canonical:
+        return canonical
+
     value = f"{filename} {title}".lower()
 
     mapping = (
@@ -972,8 +1022,17 @@ RULES
         )
     )
 
-    subject = normalize_text(
+    parsed_subject = normalize_text(
         parsed.get("subject", "")
+    )[:160]
+
+    subject = (
+        canonical_bds_subject(
+            parsed_subject,
+            filename,
+            title,
+        )
+        or parsed_subject
     )[:160]
 
     year = normalize_text(
@@ -1029,14 +1088,88 @@ def cross_check_past_paper_question(
     )
 
     if not sources:
+        fallback_prompt = f"""
+You are reviewing a BDS past-paper MCQ for practice.
+
+QUESTION
+--------
+{question.get('stem', '')}
+
+OPTIONS
+-------
+{option_text}
+
+Choose the single best answer using standard undergraduate dental knowledge.
+Return ONLY one JSON object:
+{{
+  "verified_answer": "one option label or empty string",
+  "confidence": "high/moderate/low",
+  "rationale": "one short explanation"
+}}
+
+If the OCR question/options are too damaged or genuinely ambiguous, return an
+empty verified_answer. Do not invent a missing option.
+"""
+
+        generated = generate_with_fallback(
+            fallback_prompt
+        )
+
+        if generated.get("provider") == "Error":
+            return {
+                "status": "insufficient",
+                "verified_answer": "",
+                "confidence": "low",
+                "rationale": (
+                    "No usable answer could be resolved automatically."
+                ),
+                "sources": [],
+            }
+
+        try:
+            parsed = _json_payload(
+                generated.get("response", ""),
+                "object",
+            )
+        except Exception:
+            parsed = {}
+
+        fallback_answer = str(
+            parsed.get(
+                "verified_answer",
+                "",
+            )
+            or ""
+        ).strip().upper()
+
+        valid_labels = {
+            str(key).strip().upper()
+            for key in options.keys()
+        }
+
+        if fallback_answer not in valid_labels:
+            fallback_answer = ""
+
         return {
-            "status": "insufficient",
-            "verified_answer": "",
-            "confidence": "low",
-            "rationale": (
-                "No explanatory textbook evidence was retrieved strongly "
-                "enough to verify this answer."
+            "status": (
+                "ai_reviewed"
+                if fallback_answer
+                else "insufficient"
             ),
+            "verified_answer": fallback_answer,
+            "confidence": str(
+                parsed.get(
+                    "confidence",
+                    "low",
+                )
+                or "low"
+            ).strip().lower(),
+            "rationale": normalize_text(
+                parsed.get(
+                    "rationale",
+                    "",
+                )
+            )[:1800],
             "sources": [],
         }
 
@@ -1108,7 +1241,65 @@ STRICT RULES
         verified = ""
 
     if not verified:
-        status = "insufficient"
+        fallback_prompt = f"""
+Review this BDS MCQ and select the single best option.
+
+QUESTION
+--------
+{question.get('stem', '')}
+
+OPTIONS
+-------
+{option_text}
+
+The retrieved textbook context below was relevant but not decisive:
+{context}
+
+Return ONLY JSON:
+{{
+  "verified_answer": "one option label or empty string",
+  "confidence": "high/moderate/low",
+  "rationale": "one short explanation"
+}}
+
+Use standard undergraduate dental knowledge together with the context. If the
+OCR is too damaged or the item is genuinely ambiguous, return an empty answer.
+"""
+        fallback_generated = generate_with_fallback(
+            fallback_prompt
+        )
+
+        try:
+            fallback_parsed = (
+                _json_payload(
+                    fallback_generated.get(
+                        "response",
+                        "",
+                    ),
+                    "object",
+                )
+                if fallback_generated.get(
+                    "provider"
+                ) != "Error"
+                else {}
+            )
+        except Exception:
+            fallback_parsed = {}
+
+        candidate = str(
+            fallback_parsed.get(
+                "verified_answer",
+                "",
+            )
+            or ""
+        ).strip().upper()
+
+        if candidate in valid_labels:
+            verified = candidate
+            parsed = fallback_parsed
+            status = "ai_reviewed"
+        else:
+            status = "insufficient"
     elif provided and provided in valid_labels and provided != verified:
         status = "conflict"
     else:
@@ -1144,7 +1335,7 @@ STRICT RULES
 def root():
     return {
         "message": "Dentora backend is running.",
-        "version": "2.3.3-auto-rag-past-paper-sync",
+        "version": "2.4.0-simple-past-paper-bank",
     }
 
 
@@ -2033,7 +2224,13 @@ def structure_existing_rag_paper(
     )
 
     subject = (
-        normalize_text(subject_override)
+        canonical_bds_subject(
+            subject_override,
+            metadata.get("subject", ""),
+            document.get("filename", ""),
+            document.get("title", ""),
+        )
+        or normalize_text(subject_override)
         or normalize_text(
             metadata.get("subject", "")
         )
@@ -2371,12 +2568,20 @@ def verify_past_paper(
         paper_id
     )
 
+    remaining = len(
+        past_paper_store.pending_questions(
+            paper_id,
+            limit=12,
+        )
+    )
+
     return {
         "success": True,
         "paper_id": paper_id,
         "processed": processed,
         **counts,
-        "complete": counts["pending_count"] == 0,
+        "pending_count": remaining,
+        "complete": remaining == 0,
     }
 
 

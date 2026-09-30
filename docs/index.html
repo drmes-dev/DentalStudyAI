@@ -3314,9 +3314,8 @@ a.source-card:hover {
                     <div class="test-hero">
                         <h2>Past Paper Test Centre</h2>
                         <p>
-                            Practise cross-checked past-paper MCQs, identify weak
-                            topics, and track your own exam readiness without
-                            inventing cohort percentiles.
+                            Practise MCQs from your uploaded past papers, choose a subject or topic,
+                            and track your own exam readiness.
                         </p>
 
                         <div class="readiness-grid">
@@ -3386,11 +3385,11 @@ a.source-card:hover {
                             <div class="test-stat-value" id="bankPaperCount">0</div>
                         </div>
                         <div class="test-stat-card">
-                            <div class="test-stat-label">Structured questions</div>
+                            <div class="test-stat-label">MCQs in bank</div>
                             <div class="test-stat-value" id="bankQuestionCount">0</div>
                         </div>
                         <div class="test-stat-card">
-                            <div class="test-stat-label">Cross-checked MCQs</div>
+                            <div class="test-stat-label">Ready for tests</div>
                             <div class="test-stat-value" id="bankEligibleCount">0</div>
                         </div>
                         <div class="test-stat-card">
@@ -3449,9 +3448,9 @@ a.source-card:hover {
                             <div class="test-field">
                                 <label for="testStrategy">Test strategy</label>
                                 <select id="testStrategy">
-                                    <option value="random">Random cross-checked questions</option>
+                                    <option value="random">Random questions</option>
                                     <option value="weak">Weak topics first</option>
-                                    <option value="repeated">Repeated past-paper questions</option>
+                                    <option value="repeated">Repeated questions</option>
                                 </select>
                             </div>
                         </div>
@@ -3481,7 +3480,7 @@ a.source-card:hover {
                     >
                         <h3>Add a new past paper</h3>
                         <div class="paper-progress" id="ragPastPaperSyncStatus">
-                            Past Papers already indexed in RAG are synchronized automatically.
+                            Past Papers in your RAG library are added to the question bank automatically.
                         </div>
 
                         <div class="test-form-grid">
@@ -3528,7 +3527,7 @@ a.source-card:hover {
                                 id="ingestPastPaperButton"
                                 type="button"
                             >
-                                Structure & cross-check new PDF
+                                Add PDF to question bank
                             </button>
                         </div>
 
@@ -3774,7 +3773,7 @@ a.source-card:hover {
    DENTORA CONFIGURATION
 ========================================================= */
 
-window.DENTORA_BUILD = "2026-09-30-auto-rag-bank-sync-v4";
+window.DENTORA_BUILD = "2026-09-30-simple-question-bank-v5";
 
 const API_BASE =
     "https://dentalstudyai.onrender.com";
@@ -5084,14 +5083,14 @@ async function loadTestCatalog(
 
         bankQuestionCount.textContent =
             String(
-                testCatalog.question_count ||
+                testCatalog.mcq_count ||
                 0
             );
 
         bankEligibleCount.textContent =
             String(
                 testCatalog
-                    .eligible_test_questions ||
+                    .test_ready_questions ||
                 0
             );
 
@@ -5184,7 +5183,7 @@ async function crossCheckImportedPaper(
 
         if (!verifyResponse.ok) {
             throw new Error(
-                "Cross-checking paused while processing " +
+                "Checking answers for paused while processing " +
                 label +
                 "."
             );
@@ -5205,7 +5204,7 @@ async function crossCheckImportedPaper(
             pending;
 
         pastPaperProgress.textContent =
-            "Cross-checking " +
+            "Checking answers for " +
             label +
             "… " +
             done +
@@ -5218,7 +5217,7 @@ async function crossCheckImportedPaper(
             pending > 0
         ) {
             throw new Error(
-                "Cross-checking could not progress for " +
+                "Checking answers for could not progress for " +
                 label +
                 "."
             );
@@ -5241,7 +5240,7 @@ async function importExistingPastPapers(
 
     if (ragPastPaperSyncStatus) {
         ragPastPaperSyncStatus.textContent =
-            "Synchronizing RAG Past Papers with the Test Mode question bank…";
+            "Reading your RAG Past Papers and updating the question bank…";
     }
 
     let importedCount = 0;
@@ -5304,7 +5303,7 @@ async function importExistingPastPapers(
                 ragPastPaperSyncStatus.textContent =
                     "Structured " +
                     paperLabel +
-                    ". Cross-checking its MCQs against indexed Books…";
+                    ". Preparing its MCQs for tests…";
             }
 
             await crossCheckImportedPaper(
@@ -5327,7 +5326,7 @@ async function importExistingPastPapers(
                         ) +
                         " added to the bank."
                     )
-                    : "RAG Past Papers and Test Mode are synchronized.";
+                    : "Question bank is up to date.";
         }
 
         return importedCount;
@@ -5473,7 +5472,7 @@ async function ingestPastPaper() {
         pastPaperProgress.textContent =
             "Structured " +
             data.question_count +
-            " questions. Cross-checking MCQs against textbook evidence…";
+            " questions. Checking answers for MCQs against textbook evidence…";
 
         while (pending > 0) {
             const verifyResponse =
@@ -5493,7 +5492,7 @@ async function ingestPastPaper() {
 
             if (!verifyResponse.ok) {
                 throw new Error(
-                    "Cross-checking paused because the verification service returned an error."
+                    "Checking answers for paused because the verification service returned an error."
                 );
             }
 
@@ -5512,7 +5511,7 @@ async function ingestPastPaper() {
                 pending;
 
             pastPaperProgress.textContent =
-                "Cross-checking answers… " +
+                "Checking answers for answers… " +
                 done +
                 " of " +
                 initial +
@@ -5523,13 +5522,13 @@ async function ingestPastPaper() {
                 pending > 0
             ) {
                 throw new Error(
-                    "Cross-checking could not progress. Try again after checking the AI provider."
+                    "Checking answers for could not progress. Try again after checking the AI provider."
                 );
             }
         }
 
         pastPaperProgress.textContent =
-            "Past paper structured and cross-checked. It is ready for Test Mode.";
+            "Past paper added to the question bank and ready for Test Mode.";
 
         showToast(
             "Past paper added to the test bank."
@@ -5832,7 +5831,7 @@ async function startPastPaperTest() {
             data.questions.length === 0
         ) {
             throw new Error(
-                "No cross-checked questions match those filters yet."
+                "No test questions are ready for those filters yet. Try All subjects or refresh the question bank."
             );
         }
 
@@ -6053,7 +6052,7 @@ function renderTestResults(
                         (
                             item.verification_status ===
                             "conflict"
-                                ? " · ⚠ Past-paper key conflict"
+                                ? " · ⚠ Answer-key mismatch detected"
                                 : ""
                         ) +
                         (
@@ -6087,7 +6086,7 @@ function renderTestResults(
     testResults.innerHTML =
         '<div class="test-hero">' +
         '<h2>Test complete</h2>' +
-        '<p>Your results are based on cross-checked question-bank answers. This does not infer a class percentile.</p>' +
+        '<p>Your result uses the best available answer in the question bank. This is your own performance record, not a class percentile.</p>' +
         '<div class="test-result-grid">' +
         '<div class="test-stat-card"><div class="test-stat-label">Score</div><div class="test-stat-value">' +
         escapeHtml(

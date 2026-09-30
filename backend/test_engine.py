@@ -143,6 +143,7 @@ class PastPaperStore:
                 "verification_confidence": "",
                 "verification_rationale": "",
                 "verification_sources": [],
+                "verification_attempts": 0,
                 "stem_hash": _stem_hash(stem),
             }
             clean_questions.append(item)
@@ -181,6 +182,7 @@ class PastPaperStore:
                 "verification_confidence": "",
                 "verification_rationale": "",
                 "verification_sources_json": "[]",
+                "verification_attempts": 0,
                 "stem_hash": item["stem_hash"],
                 "indexed_at": indexed_at,
             }
@@ -277,6 +279,9 @@ class PastPaperStore:
             "verification_sources": _loads(
                 metadata.get("verification_sources_json"),
                 [],
+            ),
+            "verification_attempts": int(
+                metadata.get("verification_attempts", 0) or 0
             ),
             "stem_hash": metadata.get("stem_hash", ""),
         }
@@ -375,9 +380,35 @@ class PastPaperStore:
     ) -> List[Dict[str, Any]]:
         questions = self.list_questions(
             paper_id=paper_id,
-            statuses=["pending"],
         )
-        return questions[:max(1, min(int(limit), 12))]
+
+        needs_answer = [
+            item
+            for item in questions
+            if (
+                len(item.get("options") or {}) >= 2
+                and not (
+                    item.get("verified_answer")
+                    or item.get("provided_answer")
+                )
+                and item.get("verification_status")
+                    in {"pending", "insufficient"}
+                and int(
+                    item.get(
+                        "verification_attempts",
+                        0,
+                    )
+                    or 0
+                ) < 1
+            )
+        ]
+
+        return needs_answer[
+            :max(
+                1,
+                min(int(limit), 12),
+            )
+        ]
 
     def update_verification(
         self,
@@ -417,6 +448,13 @@ class PastPaperStore:
             sources,
             8000,
         )
+        metadata["verification_attempts"] = int(
+            metadata.get(
+                "verification_attempts",
+                0,
+            )
+            or 0
+        ) + 1
 
         values = (
             vector.get("values")
@@ -520,35 +558,49 @@ class PastPaperStore:
         questions = self.list_questions()
         papers = self.list_papers()
 
+        mcqs = [
+            item
+            for item in questions
+            if len(item.get("options") or {}) >= 2
+        ]
+
         repeat_counts = Counter(
             item["stem_hash"]
-            for item in questions
+            for item in mcqs
             if item.get("stem_hash")
         )
 
         topics = Counter()
         subjects = Counter()
         years = Counter()
-        eligible = 0
+        ready = 0
+        unresolved = 0
 
-        for item in questions:
+        for item in mcqs:
             topics[
                 f"{item['subject']}|||{item['topic']}"
             ] += 1
             subjects[item["subject"]] += 1
             years[str(item["year"])] += 1
 
-            if item["verification_status"] in {
-                "verified",
-                "conflict",
-            } and item.get("verified_answer"):
-                eligible += 1
+            if (
+                item.get("verified_answer")
+                or item.get("provided_answer")
+            ):
+                ready += 1
+            else:
+                unresolved += 1
 
         return {
             "configured": True,
             "paper_count": len(papers),
             "question_count": len(questions),
-            "eligible_test_questions": eligible,
+            "mcq_count": len(mcqs),
+            "test_ready_questions": ready,
+            # Backwards-compatible alias for older frontend builds.
+            "eligible_test_questions": ready,
+            "unresolved_mcqs": unresolved,
+            "subject_count": len(subjects),
             "subjects": [
                 {"name": key, "count": value}
                 for key, value in sorted(subjects.items())
@@ -587,14 +639,18 @@ class PastPaperStore:
             subject=subject,
             year=year,
             topic=topic,
-            statuses=["verified", "conflict"],
         )
 
         questions = [
             item
             for item in questions
-            if item.get("verified_answer")
-            and len(item.get("options") or {}) >= 2
+            if (
+                len(item.get("options") or {}) >= 2
+                and (
+                    item.get("verified_answer")
+                    or item.get("provided_answer")
+                )
+            )
         ]
 
         repeat_counts = Counter(
@@ -694,7 +750,31 @@ class PastPaperStore:
 
         for item in questions:
             chosen = by_id.get(item["id"], "")
-            expected = str(item.get("verified_answer", "")).upper()
+            verified_answer = str(
+                item.get("verified_answer", "")
+                or ""
+            ).upper()
+
+            provided_answer = str(
+                item.get("provided_answer", "")
+                or ""
+            ).upper()
+
+            expected = (
+                verified_answer
+                or provided_answer
+            )
+
+            answer_source = (
+                "textbook_review"
+                if verified_answer
+                else (
+                    "past_paper_key"
+                    if provided_answer
+                    else "unresolved"
+                )
+            )
+
             is_answered = bool(chosen)
             is_correct = bool(
                 is_answered
@@ -712,6 +792,7 @@ class PastPaperStore:
                 "stem": item["stem"],
                 "chosen_answer": chosen,
                 "correct_answer": expected,
+                "answer_source": answer_source,
                 "correct": is_correct,
                 "answered": is_answered,
                 "subject": item["subject"],
