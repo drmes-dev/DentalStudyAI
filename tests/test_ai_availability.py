@@ -24,22 +24,24 @@ def completion(content, finish_reason='stop'):
 
 
 class AIAvailabilityTests(unittest.TestCase):
-    def test_compact_fallback_skips_exhausted_qwen_on_next_call(self):
+    def test_compact_fallback_switches_provider_and_skips_exhausted_models(self):
         gemini, groq, qwen = Mock(), Mock(), Mock()
         groq.with_options.return_value = groq
+        qwen.with_options.return_value = qwen
         gemini.models.generate_content.side_effect = api_error(429, 'GenerateRequestsPerDayPerProjectPerModel-FreeTier')
-        groq.chat.completions.create.side_effect = [api_error(429, 'TPD: try again in 22m5.5s'),
-                                                  completion('{"questions":[]}'), completion('{"questions":[]}')]
+        groq.chat.completions.create.side_effect = api_error(429, 'TPD: try again in 22m5.5s')
+        qwen.chat.completions.create.return_value = completion('{"questions":[]}')
         with patch.object(main, 'gemini_client', gemini), patch.object(main, 'groq_client', groq), \
              patch.object(main, 'qwen_client', qwen), patch.object(main, 'model_availability', ModelAvailability()):
             first = main.generate_with_fallback('Return JSON', timeout_seconds=60, json_response=True)
             second = main.generate_with_fallback('Return JSON', timeout_seconds=60, json_response=True)
-        self.assertEqual(first['model'], 'openai/gpt-oss-20b')
+        self.assertEqual(first['model'], 'qwen-flash')
         self.assertEqual(second['model'], first['model'])
         self.assertEqual(gemini.models.generate_content.call_count, 1)
         self.assertEqual([call.kwargs['model'] for call in groq.chat.completions.create.call_args_list],
-                         ['qwen/qwen3.8-27b', 'openai/gpt-oss-20b', 'openai/gpt-oss-20b'])
-        qwen.with_options.assert_not_called()
+                         ['qwen/qwen3.8-27b'])
+        self.assertEqual([call.kwargs['model'] for call in qwen.chat.completions.create.call_args_list],
+                         ['qwen-flash', 'qwen-flash'])
 
     def test_qwen_is_enabled_for_json_using_existing_groq_key(self):
         gemini, groq = Mock(), Mock()
@@ -73,14 +75,16 @@ class AIAvailabilityTests(unittest.TestCase):
             self.assertEqual(availability.remaining('Qwen API', 'model'), 3600)
 
     def test_truncated_json_falls_back_instead_of_saving_partial_questions(self):
-        gemini, groq = Mock(), Mock()
+        gemini, groq, qwen = Mock(), Mock(), Mock()
         gemini.models.generate_content.side_effect = api_error(403, 'Denied')
         groq.with_options.return_value = groq
-        groq.chat.completions.create.side_effect = [completion('{"questions":[]}', 'length'), completion('{"questions":[]}')]
+        qwen.with_options.return_value = qwen
+        groq.chat.completions.create.return_value = completion('{"questions":[]}', 'length')
+        qwen.chat.completions.create.return_value = completion('{"questions":[]}')
         with patch.object(main, 'gemini_client', gemini), patch.object(main, 'groq_client', groq), \
-             patch.object(main, 'model_availability', ModelAvailability()):
+             patch.object(main, 'qwen_client', qwen), patch.object(main, 'model_availability', ModelAvailability()):
             result = main.generate_with_fallback('JSON', timeout_seconds=60, json_response=True)
-        self.assertEqual(result['model'], 'openai/gpt-oss-20b')
+        self.assertEqual(result['model'], 'qwen-flash')
 
     def test_quota_failure_does_not_advance_or_write_page_checkpoint(self):
         result = {'provider': 'Error', 'response': 'Free AI quota reached', 'retry_after': 900, 'error_code': 'quota_reached'}
