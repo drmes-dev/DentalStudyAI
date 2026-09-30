@@ -4170,6 +4170,12 @@ async function unlockBeta() {
                 ? "Owner access saved on this device."
                 : "Beta access unlocked."
         );
+
+        renderOwnerPaperPanel();
+
+        if (currentMode === "test") {
+            loadTestCatalog();
+        }
     } catch (error) {
         clearBetaAccess();
         betaError.textContent =
@@ -7756,6 +7762,73 @@ sendButton.addEventListener(
 
 
 /* =========================================================
+   TEST MODE EVENTS
+========================================================= */
+
+testSubject.addEventListener(
+    "change",
+    function() {
+        populateTestTopics();
+    }
+);
+
+
+startTestButton.addEventListener(
+    "click",
+    startPastPaperTest
+);
+
+
+refreshTestBankButton.addEventListener(
+    "click",
+    loadTestCatalog
+);
+
+
+ingestPastPaperButton.addEventListener(
+    "click",
+    ingestPastPaper
+);
+
+
+testPreviousButton.addEventListener(
+    "click",
+    function() {
+        if (
+            activeTest &&
+            activeTestIndex > 0
+        ) {
+            activeTestIndex -= 1;
+            renderActiveTestQuestion();
+        }
+    }
+);
+
+
+testNextButton.addEventListener(
+    "click",
+    function() {
+        if (
+            activeTest &&
+            activeTestIndex <
+                activeTest.questions.length - 1
+        ) {
+            activeTestIndex += 1;
+            renderActiveTestQuestion();
+        }
+    }
+);
+
+
+submitTestButton.addEventListener(
+    "click",
+    function() {
+        submitActiveTest(false);
+    }
+);
+
+
+/* =========================================================
    SUGGESTIONS
 ========================================================= */
 
@@ -8192,7 +8265,11 @@ function showPdfPanel() {
 
 loadHistory();
 
+loadTestHistory();
+
 renderHistory();
+
+renderReadinessDashboard();
 
 checkBackendHealth();
 
@@ -8207,6 +8284,8 @@ window.addEventListener("beforeunload", function() {
     if (currentMessages.length > 0) {
         saveCurrentChat();
     }
+
+    stopTestTimer();
 });
 
 setMode(
