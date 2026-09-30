@@ -6,7 +6,8 @@
 - The public frontend never contains Gemini, Groq, Qwen, Pinecone, or admin secrets.
 - CORS is restricted to the configured Dentora frontend origins.
 - Public chat and temporary PDF upload endpoints use conservative in-memory rate limits.
-- Chat, PDF Tutor, and feedback endpoints require a separate shared beta access code.
+- Chat, PDF Tutor, and feedback endpoints accept either the private owner code or the invited-student beta code.
+- Owner access is remembered only in the owner's browser local storage; tester access remains session-only.
 - Temporary PDF uploads are capped by file size and page count.
 - Temporary PDF session content expires automatically and can be explicitly removed.
 - Raw persistent RAG library/search endpoints require `X-Dentora-Admin-Key`.
@@ -17,10 +18,11 @@
 Required private-beta control:
 
 ```
+DENTORA_OWNER_ACCESS_CODE=YOUR_PRIVATE_OWNER_CODE
 DENTORA_BETA_ACCESS_CODE=YOUR_SEPARATE_STUDENT_BETA_CODE
 ```
 
-Do not reuse `DENTORA_ADMIN_KEY` as the beta code.
+Keep all three values different. The admin key is server/admin-only; the owner key is for your own trusted browser; the beta code is the only code shared with invited testers.
 
 Optional beta controls:
 

@@ -2472,7 +2472,7 @@ a.source-card:hover {
                 id="betaCodeInput"
                 type="password"
                 autocomplete="off"
-                placeholder="Enter beta access code"
+                placeholder="Enter owner or beta access code"
                 aria-label="Beta access code"
             >
             <button
@@ -2491,8 +2491,9 @@ a.source-card:hover {
         ></div>
 
         <div class="beta-small">
-            The code is kept in this browser session only.
-            Do not share it publicly.
+            Invited testers are asked each browser session.
+            Your separate owner code can be remembered on your own device.
+            Never share the owner code.
         </div>
     </div>
 </div>
@@ -3057,7 +3058,7 @@ a.source-card:hover {
    DENTORA CONFIGURATION
 ========================================================= */
 
-window.DENTORA_BUILD = "2026-09-30-private-beta-v1";
+window.DENTORA_BUILD = "2026-09-30-owner-persistent-beta-v2";
 
 const API_BASE =
     "https://dentalstudyai.onrender.com";
@@ -3094,10 +3095,19 @@ let uploadedPdf = null;
 
 let chatHistory = [];
 
+let ownerAccessCode =
+    localStorage.getItem(
+        "dentora_owner_access_code"
+    ) || "";
+
 let betaAccessCode =
     sessionStorage.getItem(
         "dentora_beta_access_code"
     ) || "";
+
+let dentoraAccessCode =
+    ownerAccessCode ||
+    betaAccessCode;
 
 let dentoraSessionId =
     localStorage.getItem(
@@ -3221,9 +3231,9 @@ function betaHeaders(includeJson = false) {
             "application/json";
     }
 
-    if (betaAccessCode) {
+    if (dentoraAccessCode) {
         headers["X-Dentora-Beta-Key"] =
-            betaAccessCode;
+            dentoraAccessCode;
     }
 
     return headers;
@@ -3255,7 +3265,14 @@ function hideBetaGate() {
 
 
 function clearBetaAccess() {
+    ownerAccessCode = "";
     betaAccessCode = "";
+    dentoraAccessCode = "";
+
+    localStorage.removeItem(
+        "dentora_owner_access_code"
+    );
+
     sessionStorage.removeItem(
         "dentora_beta_access_code"
     );
@@ -3286,7 +3303,7 @@ async function verifyBetaAccess(code) {
 
     if (!response.ok) {
         let detail =
-            "Beta access could not be verified.";
+            "Dentora access could not be verified.";
 
         try {
             const data =
@@ -3303,15 +3320,43 @@ async function verifyBetaAccess(code) {
         throw new Error(detail);
     }
 
-    betaAccessCode =
+    const data =
+        await response.json();
+
+    const role =
+        data && data.access === "owner"
+            ? "owner"
+            : "beta";
+
+    dentoraAccessCode =
         candidate;
 
-    sessionStorage.setItem(
-        "dentora_beta_access_code",
-        candidate
-    );
+    if (role === "owner") {
+        ownerAccessCode =
+            candidate;
 
-    return true;
+        betaAccessCode =
+            "";
+
+        localStorage.setItem(
+            "dentora_owner_access_code",
+            candidate
+        );
+
+        sessionStorage.removeItem(
+            "dentora_beta_access_code"
+        );
+    } else {
+        betaAccessCode =
+            candidate;
+
+        sessionStorage.setItem(
+            "dentora_beta_access_code",
+            candidate
+        );
+    }
+
+    return role;
 }
 
 
@@ -3323,14 +3368,17 @@ async function unlockBeta() {
         "Checking…";
 
     try {
-        await verifyBetaAccess(
-            betaCodeInput.value
-        );
+        const role =
+            await verifyBetaAccess(
+                betaCodeInput.value
+            );
 
         hideBetaGate();
 
         showToast(
-            "Beta access unlocked."
+            role === "owner"
+                ? "Owner access saved on this device."
+                : "Beta access unlocked."
         );
     } catch (error) {
         clearBetaAccess();
@@ -3362,14 +3410,14 @@ betaCodeInput.addEventListener(
 
 
 async function initializeBetaAccess() {
-    if (!betaAccessCode) {
+    if (!dentoraAccessCode) {
         showBetaGate();
         return;
     }
 
     try {
         await verifyBetaAccess(
-            betaAccessCode
+            dentoraAccessCode
         );
         hideBetaGate();
     } catch (error) {
@@ -4061,7 +4109,7 @@ function addMessage(
                     return;
                 }
 
-                if (!betaAccessCode) {
+                if (!dentoraAccessCode) {
                     showBetaGate(
                         "Enter your beta access code before submitting feedback."
                     );
@@ -4665,7 +4713,7 @@ async function sendMessage() {
         return;
     }
 
-    if (!betaAccessCode) {
+    if (!dentoraAccessCode) {
         showBetaGate(
             "Enter your beta access code before using Dentora."
         );
@@ -5164,7 +5212,7 @@ pdfInput.addEventListener(
         }
 
 
-        if (!betaAccessCode) {
+        if (!dentoraAccessCode) {
             showBetaGate(
                 "Enter your beta access code before uploading a PDF."
             );

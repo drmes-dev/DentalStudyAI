@@ -40,6 +40,7 @@ load_dotenv()
 
 DENTORA_ADMIN_KEY = os.getenv("DENTORA_ADMIN_KEY", "").strip()
 DENTORA_BETA_ACCESS_CODE = os.getenv("DENTORA_BETA_ACCESS_CODE", "").strip()
+DENTORA_OWNER_ACCESS_CODE = os.getenv("DENTORA_OWNER_ACCESS_CODE", "").strip()
 MAX_WEB_INGEST_MB = int(os.getenv("MAX_WEB_INGEST_MB", "45"))
 MAX_WEB_OCR_PAGES = int(os.getenv("MAX_WEB_OCR_PAGES", "30"))
 
@@ -329,29 +330,59 @@ def require_admin(supplied_key: Optional[str]):
         )
 
 
-def require_beta_access(supplied_key: Optional[str]):
-    """Require the separate student beta access code.
+def access_role(supplied_key: Optional[str]) -> Optional[str]:
+    """Return owner/beta for a valid app-access key, otherwise None."""
+    if not supplied_key:
+        return None
 
-    Never reuse DENTORA_ADMIN_KEY here. The beta code may be shared with
-    invited students; the admin key must remain private.
+    if (
+        DENTORA_OWNER_ACCESS_CODE
+        and hmac.compare_digest(
+            supplied_key,
+            DENTORA_OWNER_ACCESS_CODE,
+        )
+    ):
+        return "owner"
+
+    if (
+        DENTORA_BETA_ACCESS_CODE
+        and hmac.compare_digest(
+            supplied_key,
+            DENTORA_BETA_ACCESS_CODE,
+        )
+    ):
+        return "beta"
+
+    return None
+
+
+def require_beta_access(supplied_key: Optional[str]) -> str:
+    """Allow either the private owner key or the invited-student beta key.
+
+    DENTORA_ADMIN_KEY remains separate and is never accepted here.
     """
-    if not DENTORA_BETA_ACCESS_CODE:
+    if not (
+        DENTORA_BETA_ACCESS_CODE
+        or DENTORA_OWNER_ACCESS_CODE
+    ):
         raise HTTPException(
             status_code=503,
             detail=(
-                "Dentora beta access is not configured yet. "
-                "The administrator needs to set DENTORA_BETA_ACCESS_CODE."
+                "Dentora access is not configured yet. "
+                "Set DENTORA_OWNER_ACCESS_CODE and/or "
+                "DENTORA_BETA_ACCESS_CODE."
             ),
         )
 
-    if not supplied_key or not hmac.compare_digest(
-        supplied_key,
-        DENTORA_BETA_ACCESS_CODE,
-    ):
+    role = access_role(supplied_key)
+
+    if role is None:
         raise HTTPException(
             status_code=401,
-            detail="Invalid beta access code.",
+            detail="Invalid Dentora access code.",
         )
+
+    return role
 
 
 # =========================================================
@@ -516,6 +547,7 @@ def health():
         "rag_configured": rag_store.configured,
         "beta_access_required": True,
         "beta_access_configured": bool(DENTORA_BETA_ACCESS_CODE),
+        "owner_access_configured": bool(DENTORA_OWNER_ACCESS_CODE),
     }
 
 
@@ -533,8 +565,8 @@ def beta_verify(
         12,
         15 * 60,
     )
-    require_beta_access(x_dentora_beta_key)
-    return {"ok": True, "access": "beta"}
+    role = require_beta_access(x_dentora_beta_key)
+    return {"ok": True, "access": role}
 
 
 @app.get("/rag/status")
