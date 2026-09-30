@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Privacy · Dentora by Ehsan</title>
+<style>
+:root{--bg:#07111f;--panel:#0d1d31;--text:#edf4ff;--muted:#91a4bb;--accent:#67e8f9;--line:rgba(255,255,255,.10)}
+*{box-sizing:border-box} body{margin:0;background:radial-gradient(circle at 10% 5%,rgba(103,232,249,.09),transparent 30%),var(--bg);color:var(--text);font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;line-height:1.7}
+main{width:min(820px,calc(100% - 32px));margin:0 auto;padding:44px 0 64px}
+a{color:var(--accent)} .back{text-decoration:none;font-size:13px;color:var(--muted)}
+.card{margin-top:22px;padding:28px;border:1px solid var(--line);border-radius:22px;background:rgba(13,29,49,.78);box-shadow:0 24px 70px rgba(0,0,0,.22)}
+h1{margin:0 0 6px;font-size:32px;letter-spacing:-.7px} h2{margin-top:30px;font-size:18px} p,li{color:#bfd0e2} .meta{color:var(--muted);font-size:12px;margin-bottom:22px}
+.note{padding:13px 15px;border-left:3px solid var(--accent);background:rgba(103,232,249,.055);border-radius:10px;color:#d6eaf6}
+footer{margin-top:26px;color:#687f96;font-size:12px}
+</style>
+</head>
+<body>
+<main>
+<a class="back" href="index.html">← Back to Dentora</a>
+<div class="card">
+<h1>Privacy Notice</h1>
+<div class="meta">Beta notice · Updated 30 September 2026</div>
+<p>This notice explains how the current Dentora beta handles study prompts, chat history, and PDF uploads.</p>
+<h2>What the browser stores</h2>
+<p>Recent chats and a random browser session identifier are stored in your browser's local storage. They are not currently synced to a Dentora account. Clearing browser data or using another device may remove access to that local history.</p>
+<h2>What the backend processes</h2>
+<p>When you ask a question, the prompt is sent to the Dentora backend. Relevant textbook or uploaded-PDF excerpts may be included in a model request so that Dentora can generate a source-aware answer.</p>
+<h2>Temporary PDF Tutor uploads</h2>
+<p>PDF Tutor uploads are processed for the current browser session. The original temporary PDF is not intentionally stored as a permanent file by Dentora. Extracted temporary session content is held in server memory and is automatically expired after a limited period; using the Remove PDF control also asks the backend to clear that session copy.</p>
+<h2>AI and infrastructure providers</h2>
+<p>Dentora uses external infrastructure and AI providers. Prompts and the limited excerpts needed to answer them may be processed by the configured providers. Hosting and AI providers may maintain their own security and operational logs under their respective policies.</p>
+<h2>Permanent study library</h2>
+<p>Dentora also has an administrator-managed retrieval library used to support cited study answers. Ordinary PDF Tutor uploads are not automatically added to this permanent library.</p>
+<h2>Do not upload sensitive information</h2>
+<p class="note">Do not upload patient records, personally identifiable clinical information, passwords, financial information, or other sensitive data. Dentora is an educational study tool, not a system for storing patient information.</p>
+<h2>Accounts and payments</h2>
+<p>The current beta does not provide Dentora user accounts or collect payment details through the app.</p>
+</div>
+<footer>Dentora by Ehsan · Beta</footer>
+</main>
+</body>
+</html>

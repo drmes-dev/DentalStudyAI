@@ -5,7 +5,7 @@
 
 <meta
     name="viewport"
-    content="width=device-width, initial-scale=1.0, maximum-scale=1.0"
+    content="width=device-width, initial-scale=1.0"
 />
 
 <meta
@@ -678,8 +678,47 @@ body {
     width: 7px;
     height: 7px;
     border-radius: 50%;
+    background: #fbbf24;
+    box-shadow: 0 0 10px rgba(251,191,36,.45);
+}
+
+.status-dot.online {
     background: var(--success);
     box-shadow: 0 0 10px rgba(74,222,128,.6);
+}
+
+.status-dot.offline {
+    background: var(--danger);
+    box-shadow: 0 0 10px rgba(251,113,133,.55);
+}
+
+.legal-links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 10px;
+    margin-top: 9px;
+    font-size: 9px;
+}
+
+.legal-links a,
+.safety-note a {
+    color: #71879e;
+    text-decoration: none;
+}
+
+.legal-links a:hover,
+.safety-note a:hover {
+    color: #bdf7ff;
+}
+
+.safety-note {
+    position: relative;
+    z-index: 2;
+    margin-top: 6px;
+    text-align: center;
+    color: #526b83;
+    font-size: 8px;
+    line-height: 1.4;
 }
 
 /* =========================
@@ -2203,9 +2242,6 @@ a.source-card:hover {
         font-size: 8px;
     }
 
-    .pdf-badge {
-        display: flex;
-    }
 }
 
 @media (max-width: 420px) {
@@ -2476,8 +2512,14 @@ a.source-card:hover {
         <div class="sidebar-footer">
 
             <div class="status-pill">
-                <span class="status-dot"></span>
-                <span>AI service connected</span>
+                <span class="status-dot" id="serviceStatusDot"></span>
+                <span id="serviceStatusText">Checking AI service…</span>
+            </div>
+
+            <div class="legal-links">
+                <a href="about.html">About</a>
+                <a href="privacy.html">Privacy</a>
+                <a href="terms.html">Terms</a>
             </div>
 
         </div>
@@ -2608,9 +2650,9 @@ a.source-card:hover {
             </h2>
 
             <p>
-                Your AI-powered BDS study companion for
-                concepts, MCQs, viva, OSCE preparation and
-                PDF-based revision.
+                Ask BDS questions, practise viva and OSCE,
+                and revise from your material with source-aware
+                answers and textbook page citations when available.
             </p>
 
             <div class="suggestions">
@@ -2843,6 +2885,13 @@ a.source-card:hover {
                     Enter to send · Shift + Enter for a new line
                 </div>
 
+                <div class="safety-note">
+                    Educational use only. Dentora can make mistakes —
+                    verify critical clinical information against the cited source.
+                    <a href="privacy.html">Privacy</a> ·
+                    <a href="terms.html">Terms</a>
+                </div>
+
             </div>
 
         </section>
@@ -2862,7 +2911,7 @@ a.source-card:hover {
    DENTORA CONFIGURATION
 ========================================================= */
 
-window.DENTORA_BUILD = "2026-09-30-premium-hero-v2";
+window.DENTORA_BUILD = "2026-09-30-public-beta-safety-v1";
 
 const API_BASE =
     "https://dentalstudyai.onrender.com";
@@ -2872,6 +2921,9 @@ const CHAT_API =
 
 const PDF_API =
     API_BASE + "/upload-pdf";
+
+const HEALTH_API =
+    API_BASE + "/health";
 
 
 /* =========================================================
@@ -2980,6 +3032,75 @@ const pageSubtitle =
 
 const toastContainer =
     document.getElementById("toastContainer");
+
+const serviceStatusDot =
+    document.getElementById("serviceStatusDot");
+
+const serviceStatusText =
+    document.getElementById("serviceStatusText");
+
+
+/* =========================================================
+   BACKEND HEALTH
+========================================================= */
+
+function setServiceStatus(state, text) {
+    serviceStatusDot.classList.remove(
+        "online",
+        "offline"
+    );
+
+    if (state) {
+        serviceStatusDot.classList.add(state);
+    }
+
+    serviceStatusText.textContent = text;
+}
+
+
+async function checkBackendHealth() {
+    const controller = new AbortController();
+    const timeout = setTimeout(
+        () => controller.abort(),
+        8000
+    );
+
+    try {
+        const response = await fetch(
+            HEALTH_API,
+            {
+                cache: "no-store",
+                signal: controller.signal
+            }
+        );
+
+        if (!response.ok) {
+            throw new Error(
+                "Health check HTTP " + response.status
+            );
+        }
+
+        const data = await response.json();
+
+        if (data && data.ok === true) {
+            setServiceStatus(
+                "online",
+                "AI service connected"
+            );
+        } else {
+            throw new Error(
+                "Unexpected health response"
+            );
+        }
+    } catch (error) {
+        setServiceStatus(
+            "offline",
+            "AI service unavailable"
+        );
+    } finally {
+        clearTimeout(timeout);
+    }
+}
 
 
 /* =========================================================
@@ -4583,12 +4704,23 @@ pdfInput.addEventListener(
 
 
             if (!response.ok) {
-
-                throw new Error(
+                let detail =
                     "PDF upload failed: HTTP " +
-                    response.status
-                );
+                    response.status;
 
+                try {
+                    const errorData =
+                        await response.json();
+
+                    if (
+                        errorData &&
+                        typeof errorData.detail === "string"
+                    ) {
+                        detail = errorData.detail;
+                    }
+                } catch (_) {}
+
+                throw new Error(detail);
             }
 
 
@@ -4647,6 +4779,7 @@ pdfInput.addEventListener(
 
 
             showToast(
+                error.message ||
                 "PDF upload failed. Please try again.",
                 "error"
             );
@@ -4665,7 +4798,7 @@ document
     .getElementById("removePdf")
     .addEventListener(
         "click",
-        function() {
+        async function() {
 
             uploadedPdf =
                 null;
@@ -4679,6 +4812,23 @@ document
 
             pdfBadge.style.display =
                 "none";
+
+            try {
+                await fetch(
+                    PDF_API + "/" +
+                    encodeURIComponent(
+                        dentoraSessionId
+                    ),
+                    {
+                        method: "DELETE"
+                    }
+                );
+            } catch (error) {
+                console.warn(
+                    "Temporary PDF cleanup request failed:",
+                    error
+                );
+            }
 
             showToast(
                 "PDF removed."
@@ -4717,6 +4867,13 @@ function showPdfPanel() {
 loadHistory();
 
 renderHistory();
+
+checkBackendHealth();
+
+setInterval(
+    checkBackendHealth,
+    60000
+);
 
 window.addEventListener("beforeunload", function() {
     if (currentMessages.length > 0) {

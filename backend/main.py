@@ -1,4 +1,4 @@
-from fastapi import FastAPI, UploadFile, File, Form, Header, HTTPException
+from fastapi import FastAPI, UploadFile, File, Form, Header, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from io import BytesIO
@@ -12,6 +12,7 @@ from typing import Any, Dict, List, Optional
 import os
 import re
 import time
+from threading import Lock
 
 import pytesseract
 import ollama
@@ -40,6 +41,27 @@ DENTORA_ADMIN_KEY = os.getenv("DENTORA_ADMIN_KEY", "").strip()
 MAX_WEB_INGEST_MB = int(os.getenv("MAX_WEB_INGEST_MB", "45"))
 MAX_WEB_OCR_PAGES = int(os.getenv("MAX_WEB_OCR_PAGES", "30"))
 
+# Public beta safety defaults. These can be overridden in Render.
+MAX_TEMP_PDF_MB = int(os.getenv("MAX_TEMP_PDF_MB", "20"))
+MAX_TEMP_PDF_PAGES = int(os.getenv("MAX_TEMP_PDF_PAGES", "500"))
+SESSION_PDF_TTL_SECONDS = int(os.getenv("SESSION_PDF_TTL_SECONDS", str(4 * 60 * 60)))
+CHAT_RATE_LIMIT = int(os.getenv("CHAT_RATE_LIMIT", "30"))
+CHAT_RATE_WINDOW_SECONDS = int(os.getenv("CHAT_RATE_WINDOW_SECONDS", "600"))
+PDF_RATE_LIMIT = int(os.getenv("PDF_RATE_LIMIT", "3"))
+PDF_RATE_WINDOW_SECONDS = int(os.getenv("PDF_RATE_WINDOW_SECONDS", "3600"))
+
+_default_origins = (
+    "https://drmes-dev.github.io,"
+    "http://localhost:5500,"
+    "http://127.0.0.1:5500,"
+    "http://localhost:8000"
+)
+ALLOWED_ORIGINS = [
+    origin.strip()
+    for origin in os.getenv("DENTORA_ALLOWED_ORIGINS", _default_origins).split(",")
+    if origin.strip()
+]
+
 
 # =========================================================
 # APP
@@ -53,10 +75,10 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=ALLOWED_ORIGINS,
+    allow_credentials=False,
+    allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
+    allow_headers=["Content-Type", "X-Dentora-Admin-Key"],
 )
 
 
@@ -101,6 +123,83 @@ class RagSearchRequest(BaseModel):
 # so one visitor's PDF is not mixed with another visitor's PDF.
 
 session_pdfs: Dict[str, Dict[str, Any]] = {}
+
+_rate_events: Dict[str, List[float]] = {}
+_rate_lock = Lock()
+
+
+def _client_ip(request: Request) -> str:
+    # Render forwards the original client address through X-Forwarded-For.
+    forwarded = request.headers.get("x-forwarded-for", "")
+    if forwarded:
+        return forwarded.split(",", 1)[0].strip()[:80]
+
+    if request.client and request.client.host:
+        return request.client.host[:80]
+
+    return "unknown"
+
+
+def enforce_rate_limit(
+    request: Request,
+    bucket: str,
+    limit: int,
+    window_seconds: int,
+):
+    """Small in-memory beta limiter.
+
+    This protects a single Render instance from accidental/obvious abuse.
+    It intentionally does not pretend to be a distributed production limiter.
+    """
+    now = time.time()
+    key = f"{bucket}:{_client_ip(request)}"
+
+    with _rate_lock:
+        recent = [
+            timestamp
+            for timestamp in _rate_events.get(key, [])
+            if now - timestamp < window_seconds
+        ]
+
+        if len(recent) >= limit:
+            retry_after = max(
+                1,
+                int(window_seconds - (now - recent[0])),
+            )
+            _rate_events[key] = recent
+            raise HTTPException(
+                status_code=429,
+                detail="Too many requests. Please wait before trying again.",
+                headers={"Retry-After": str(retry_after)},
+            )
+
+        recent.append(now)
+        _rate_events[key] = recent
+
+        # Keep the limiter bounded on a long-running instance.
+        if len(_rate_events) > 5000:
+            stale_keys = [
+                item_key
+                for item_key, timestamps in _rate_events.items()
+                if not timestamps or now - timestamps[-1] > max(
+                    CHAT_RATE_WINDOW_SECONDS,
+                    PDF_RATE_WINDOW_SECONDS,
+                )
+            ]
+            for item_key in stale_keys[:1000]:
+                _rate_events.pop(item_key, None)
+
+
+def purge_expired_session_pdfs():
+    now = time.time()
+    expired = [
+        session_id
+        for session_id, item in session_pdfs.items()
+        if now - float(item.get("uploaded_at", 0) or 0)
+        > SESSION_PDF_TTL_SECONDS
+    ]
+    for session_id in expired:
+        session_pdfs.pop(session_id, None)
 
 
 # =========================================================
@@ -364,7 +463,16 @@ Return the corrected answer only.
 def root():
     return {
         "message": "Dentora backend is running.",
-        "version": "2.0.0-rag",
+        "version": "2.1.0-beta-safety",
+    }
+
+
+@app.get("/health")
+def health():
+    return {
+        "ok": True,
+        "service": "Dentora API",
+        "rag_configured": rag_store.configured,
     }
 
 
@@ -379,19 +487,56 @@ def rag_status():
 
 @app.post("/upload-pdf")
 async def upload_pdf(
+    request: Request,
     file: UploadFile = File(...),
     session_id: str = Form("default"),
 ):
+    enforce_rate_limit(
+        request,
+        "pdf-upload",
+        PDF_RATE_LIMIT,
+        PDF_RATE_WINDOW_SECONDS,
+    )
+    purge_expired_session_pdfs()
+
     filename = file.filename or "uploaded.pdf"
 
     if not filename.lower().endswith(".pdf"):
-        return {
-            "success": False,
-            "message": "Only PDF files are supported.",
-        }
+        raise HTTPException(
+            status_code=400,
+            detail="Only PDF files are supported.",
+        )
 
     try:
-        contents = await file.read()
+        max_bytes = MAX_TEMP_PDF_MB * 1024 * 1024
+        contents = await file.read(max_bytes + 1)
+
+        if len(contents) > max_bytes:
+            raise HTTPException(
+                status_code=413,
+                detail=(
+                    f"PDF Tutor accepts files up to {MAX_TEMP_PDF_MB} MB. "
+                    "Use a smaller chapter or compressed PDF."
+                ),
+            )
+
+        try:
+            page_count = len(PdfReader(BytesIO(contents)).pages)
+        except Exception as exc:
+            raise HTTPException(
+                status_code=400,
+                detail="The uploaded file could not be read as a valid PDF.",
+            ) from exc
+
+        if page_count > MAX_TEMP_PDF_PAGES:
+            raise HTTPException(
+                status_code=413,
+                detail=(
+                    f"PDF Tutor accepts up to {MAX_TEMP_PDF_PAGES} pages "
+                    "per temporary upload."
+                ),
+            )
+
         extraction = extract_pdf_pages(contents, allow_ocr=True, web_mode=True)
         chunks = chunk_pages(extraction["pages"])
 
@@ -434,12 +579,30 @@ async def upload_pdf(
             "message": "PDF is ready for this chat session.",
         }
 
+    except HTTPException:
+        raise
     except Exception as exc:
         print("PDF upload error:", exc)
-        return {
-            "success": False,
-            "message": str(exc),
-        }
+        raise HTTPException(
+            status_code=500,
+            detail="Dentora could not process this PDF.",
+        ) from exc
+
+
+@app.delete("/upload-pdf/{session_id}")
+def remove_session_pdf(
+    session_id: str,
+    request: Request,
+):
+    enforce_rate_limit(
+        request,
+        "pdf-remove",
+        20,
+        PDF_RATE_WINDOW_SECONDS,
+    )
+    session_id = (session_id.strip() or "default")[:120]
+    removed = session_pdfs.pop(session_id, None) is not None
+    return {"success": True, "removed": removed}
 
 
 # =========================================================
@@ -534,7 +697,14 @@ async def rag_ingest_pdf(
 # =========================================================
 
 @app.get("/rag/library")
-def rag_library():
+def rag_library(
+    x_dentora_admin_key: Optional[str] = Header(
+        default=None,
+        alias="X-Dentora-Admin-Key",
+    ),
+):
+    require_admin(x_dentora_admin_key)
+
     if not rag_store.configured:
         return {
             "configured": False,
@@ -553,7 +723,15 @@ def rag_library():
 
 
 @app.post("/rag/search")
-def rag_search(request: RagSearchRequest):
+def rag_search(
+    request: RagSearchRequest,
+    x_dentora_admin_key: Optional[str] = Header(
+        default=None,
+        alias="X-Dentora-Admin-Key",
+    ),
+):
+    require_admin(x_dentora_admin_key)
+
     if not rag_store.configured:
         return {
             "configured": False,
@@ -604,7 +782,18 @@ def rag_delete_document(
 # =========================================================
 
 @app.post("/chat")
-def chat(request: ChatRequest):
+def chat(
+    request: ChatRequest,
+    http_request: Request,
+):
+    enforce_rate_limit(
+        http_request,
+        "chat",
+        CHAT_RATE_LIMIT,
+        CHAT_RATE_WINDOW_SECONDS,
+    )
+    purge_expired_session_pdfs()
+
     message = request.message.strip()
     mode_key = request.mode.strip().lower()
     exclude_assessment = mode_key not in {"mcq", "mcq mode", "quiz"}

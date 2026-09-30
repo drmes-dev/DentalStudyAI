@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>About · Dentora by Ehsan</title>
+<style>
+:root{--bg:#07111f;--panel:#0d1d31;--text:#edf4ff;--muted:#91a4bb;--accent:#67e8f9;--line:rgba(255,255,255,.10)}
+*{box-sizing:border-box} body{margin:0;background:radial-gradient(circle at 10% 5%,rgba(103,232,249,.09),transparent 30%),var(--bg);color:var(--text);font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;line-height:1.7}
+main{width:min(820px,calc(100% - 32px));margin:0 auto;padding:44px 0 64px}
+a{color:var(--accent)} .back{text-decoration:none;font-size:13px;color:var(--muted)}
+.card{margin-top:22px;padding:28px;border:1px solid var(--line);border-radius:22px;background:rgba(13,29,49,.78);box-shadow:0 24px 70px rgba(0,0,0,.22)}
+h1{margin:0 0 6px;font-size:32px;letter-spacing:-.7px} h2{margin-top:30px;font-size:18px} p,li{color:#bfd0e2} .meta{color:var(--muted);font-size:12px;margin-bottom:22px}
+.note{padding:13px 15px;border-left:3px solid var(--accent);background:rgba(103,232,249,.055);border-radius:10px;color:#d6eaf6}
+footer{margin-top:26px;color:#687f96;font-size:12px}
+</style>
+</head>
+<body>
+<main>
+<a class="back" href="index.html">← Back to Dentora</a>
+<div class="card">
+<h1>About Dentora</h1>
+<div class="meta">An evidence-grounded BDS study assistant</div>
+<p>Dentora is being built for dental students who need more than a generic chatbot. It combines BDS-focused study modes with retrieval from dental learning material and source metadata.</p>
+<h2>What makes it different</h2>
+<ul>
+<li><strong>Study Chat</strong> for exam-relevant explanations.</li>
+<li><strong>MCQ Mode</strong> for one-best-answer practice and reasoning.</li>
+<li><strong>Viva Mode</strong> for examiner-style oral revision.</li>
+<li><strong>OSCE Mode</strong> for structured clinical-station practice.</li>
+<li><strong>PDF Tutor</strong> for asking questions from a temporary uploaded PDF.</li>
+<li><strong>Retrieval-grounded answers</strong> with source/page information when relevant evidence is available.</li>
+</ul>
+<h2>Grounding does not mean infallible</h2>
+<p>Dentora uses retrieval and verification safeguards to reduce unsupported claims, but AI systems can still misunderstand a source or make mistakes. Source chips show retrieved evidence; students should verify high-stakes facts in the cited material.</p>
+<h2>Current status</h2>
+<p>Dentora is in beta and is being technically validated across Endodontics, Oral &amp; Maxillofacial Surgery, Orthodontics, and Operative Dentistry before wider release.</p>
+<p class="note">The goal is curriculum-specific, citation-aware BDS revision — not replacement of textbooks, teachers, or clinical judgment.</p>
+</div>
+<footer>Dentora by Ehsan · Beta</footer>
+</main>
+</body>
+</html>
