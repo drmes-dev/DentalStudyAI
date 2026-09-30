@@ -3838,10 +3838,10 @@ const PAST_PAPER_IMPORT_API =
     API_BASE + "/past-papers/import-existing";
 
 const PAST_PAPER_RAG_DOCUMENTS_API =
-    API_BASE + "/past-papers/rag-documents";
+    API_BASE + "/past-papers/rag-sources";
 
 const PAST_PAPER_IMPORT_RAG_API =
-    API_BASE + "/past-papers/import-rag";
+    API_BASE + "/past-papers/import-source";
 
 const TEST_CATALOG_API =
     API_BASE + "/test/catalog";
@@ -5229,10 +5229,16 @@ async function loadExistingRagPaperDocuments() {
 
                 option.textContent =
                     (
-                        item.already_imported
+                        (
+                            item.already_in_test_bank ||
+                            item.already_imported
+                        )
                             ? "✓ "
                             : (
-                                item.suggested_past_paper
+                                (
+                                    item.likely_past_paper ||
+                                    item.suggested_past_paper
+                                )
                                     ? "★ "
                                     : ""
                             )
