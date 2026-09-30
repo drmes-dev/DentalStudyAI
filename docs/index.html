@@ -4410,6 +4410,1527 @@ function saveHistory() {
 
 
 /* =========================================================
+   TEST HISTORY + READINESS
+========================================================= */
+
+function loadTestHistory() {
+    try {
+        const saved =
+            localStorage.getItem(
+                "dentora_test_history"
+            );
+
+        const parsed =
+            saved
+                ? JSON.parse(saved)
+                : [];
+
+        testHistory =
+            Array.isArray(parsed)
+                ? parsed
+                : [];
+
+    } catch (error) {
+        console.error(
+            "Test history load error:",
+            error
+        );
+
+        testHistory = [];
+    }
+}
+
+
+function saveTestHistory() {
+    try {
+        localStorage.setItem(
+            "dentora_test_history",
+            JSON.stringify(
+                testHistory.slice(0, 40)
+            )
+        );
+    } catch (error) {
+        console.error(
+            "Test history save error:",
+            error
+        );
+    }
+}
+
+
+function percentText(value) {
+    if (
+        value === null ||
+        value === undefined ||
+        Number.isNaN(Number(value))
+    ) {
+        return "—";
+    }
+
+    return (
+        Math.round(Number(value)) +
+        "%"
+    );
+}
+
+
+function weakTopicNames() {
+    const stats = {};
+
+    testHistory.forEach(
+        attempt => {
+            (
+                Array.isArray(attempt.items)
+                    ? attempt.items
+                    : []
+            ).forEach(
+                item => {
+                    const topic =
+                        String(
+                            item.topic ||
+                            "Unclassified"
+                        );
+
+                    if (!stats[topic]) {
+                        stats[topic] = {
+                            total: 0,
+                            correct: 0
+                        };
+                    }
+
+                    stats[topic].total += 1;
+
+                    if (item.correct) {
+                        stats[topic].correct += 1;
+                    }
+                }
+            );
+        }
+    );
+
+    return Object.entries(stats)
+        .filter(
+            entry => {
+                const value = entry[1];
+                return (
+                    value.total >= 2 &&
+                    (
+                        value.correct /
+                        value.total
+                    ) < 0.70
+                );
+            }
+        )
+        .sort(
+            (a, b) => {
+                const aa =
+                    a[1].correct /
+                    a[1].total;
+                const bb =
+                    b[1].correct /
+                    b[1].total;
+                return aa - bb;
+            }
+        )
+        .map(entry => entry[0]);
+}
+
+
+function calculateReadiness() {
+    if (
+        !Array.isArray(testHistory) ||
+        testHistory.length === 0
+    ) {
+        return null;
+    }
+
+    let total = 0;
+    let correct = 0;
+    let totalSeconds = 0;
+    let repeatedTotal = 0;
+    let repeatedCorrect = 0;
+
+    const seenQuestions =
+        new Set();
+
+    testHistory.forEach(
+        attempt => {
+            total +=
+                Number(attempt.total || 0);
+
+            correct +=
+                Number(attempt.correct || 0);
+
+            totalSeconds +=
+                Number(
+                    attempt.duration_seconds ||
+                    0
+                );
+
+            (
+                Array.isArray(attempt.question_ids)
+                    ? attempt.question_ids
+                    : []
+            ).forEach(
+                id =>
+                    seenQuestions.add(id)
+            );
+
+            (
+                Array.isArray(attempt.items)
+                    ? attempt.items
+                    : []
+            ).forEach(
+                item => {
+                    if (
+                        Number(
+                            item.repeat_count ||
+                            1
+                        ) > 1
+                    ) {
+                        repeatedTotal += 1;
+
+                        if (item.correct) {
+                            repeatedCorrect += 1;
+                        }
+                    }
+                }
+            );
+        }
+    );
+
+    const accuracy =
+        total
+            ? correct / total * 100
+            : 0;
+
+    const eligible =
+        testCatalog
+            ? Number(
+                testCatalog
+                    .eligible_test_questions ||
+                0
+            )
+            : 0;
+
+    const coverage =
+        eligible
+            ? Math.min(
+                100,
+                seenQuestions.size /
+                eligible *
+                100
+            )
+            : 0;
+
+    const highYield =
+        repeatedTotal
+            ? repeatedCorrect /
+                repeatedTotal *
+                100
+            : accuracy;
+
+    const recentScores =
+        testHistory
+            .slice(0, 5)
+            .map(
+                item =>
+                    Number(
+                        item.score_percent ||
+                        0
+                    )
+            );
+
+    let consistency =
+        accuracy;
+
+    if (recentScores.length >= 2) {
+        const mean =
+            recentScores.reduce(
+                (sum, value) =>
+                    sum + value,
+                0
+            ) /
+            recentScores.length;
+
+        const variance =
+            recentScores.reduce(
+                (sum, value) =>
+                    sum +
+                    Math.pow(
+                        value - mean,
+                        2
+                    ),
+                0
+            ) /
+            recentScores.length;
+
+        const standardDeviation =
+            Math.sqrt(variance);
+
+        consistency =
+            Math.max(
+                0,
+                100 -
+                standardDeviation * 2
+            );
+    }
+
+    const averageSeconds =
+        total
+            ? totalSeconds / total
+            : 0;
+
+    const timeEfficiency =
+        averageSeconds <= 75
+            ? 100
+            : Math.max(
+                20,
+                100 -
+                (
+                    averageSeconds -
+                    75
+                )
+            );
+
+    const readiness =
+        accuracy * 0.45 +
+        coverage * 0.20 +
+        highYield * 0.15 +
+        consistency * 0.10 +
+        timeEfficiency * 0.10;
+
+    return {
+        readiness:
+            Math.round(readiness),
+        accuracy:
+            Math.round(accuracy),
+        coverage:
+            Math.round(coverage),
+        highYield:
+            Math.round(highYield),
+        consistency:
+            Math.round(consistency),
+        timeEfficiency:
+            Math.round(timeEfficiency),
+        averageSeconds:
+            Math.round(averageSeconds),
+        seenQuestions:
+            seenQuestions.size
+    };
+}
+
+
+function renderReadinessDashboard() {
+    const metrics =
+        calculateReadiness();
+
+    if (!metrics) {
+        readinessScore.textContent =
+            "—";
+
+        readinessAccuracy.textContent =
+            "—";
+
+        readinessCoverage.textContent =
+            "—";
+
+        readinessNote.textContent =
+            "Complete a test to establish your baseline.";
+
+        return;
+    }
+
+    readinessScore.textContent =
+        metrics.readiness + "/100";
+
+    readinessAccuracy.textContent =
+        percentText(
+            metrics.accuracy
+        );
+
+    readinessCoverage.textContent =
+        percentText(
+            metrics.coverage
+        );
+
+    const weak =
+        weakTopicNames();
+
+    readinessNote.textContent =
+        weak.length
+            ? (
+                "Weakest tracked topics: " +
+                weak.slice(0, 3).join(", ") +
+                ". This is your own readiness index, not a cohort percentile."
+            )
+            : (
+                "Based on your own accuracy, coverage, repeated-question performance, consistency and timing. No cohort percentile is being inferred."
+            );
+}
+
+
+function renderOwnerPaperPanel() {
+    ownerPaperPanel.classList.toggle(
+        "show",
+        Boolean(ownerAccessCode)
+    );
+}
+
+
+/* =========================================================
+   TEST BANK
+========================================================= */
+
+function populateTestFilters() {
+    const currentSubject =
+        testSubject.value;
+
+    const currentTopic =
+        testTopic.value;
+
+    const currentYear =
+        testYear.value;
+
+    testSubject.innerHTML =
+        '<option value="">All subjects</option>';
+
+    testYear.innerHTML =
+        '<option value="">All years</option>';
+
+    if (!testCatalog) {
+        return;
+    }
+
+    (
+        Array.isArray(
+            testCatalog.subjects
+        )
+            ? testCatalog.subjects
+            : []
+    ).forEach(
+        item => {
+            const option =
+                document.createElement(
+                    "option"
+                );
+
+            option.value =
+                item.name;
+
+            option.textContent =
+                item.name +
+                " (" +
+                item.count +
+                ")";
+
+            testSubject.appendChild(
+                option
+            );
+        }
+    );
+
+    (
+        Array.isArray(
+            testCatalog.years
+        )
+            ? testCatalog.years
+            : []
+    ).forEach(
+        item => {
+            const option =
+                document.createElement(
+                    "option"
+                );
+
+            option.value =
+                item.name;
+
+            option.textContent =
+                item.name +
+                " (" +
+                item.count +
+                ")";
+
+            testYear.appendChild(
+                option
+            );
+        }
+    );
+
+    if (
+        Array.from(
+            testSubject.options
+        ).some(
+            option =>
+                option.value ===
+                currentSubject
+        )
+    ) {
+        testSubject.value =
+            currentSubject;
+    }
+
+    if (
+        Array.from(
+            testYear.options
+        ).some(
+            option =>
+                option.value ===
+                currentYear
+        )
+    ) {
+        testYear.value =
+            currentYear;
+    }
+
+    populateTestTopics(
+        currentTopic
+    );
+}
+
+
+function populateTestTopics(
+    preferred = ""
+) {
+    testTopic.innerHTML =
+        '<option value="">All topics</option>';
+
+    if (!testCatalog) {
+        return;
+    }
+
+    const subject =
+        testSubject.value;
+
+    (
+        Array.isArray(
+            testCatalog.topics
+        )
+            ? testCatalog.topics
+            : []
+    )
+        .filter(
+            item =>
+                !subject ||
+                item.subject === subject
+        )
+        .forEach(
+            item => {
+                const option =
+                    document.createElement(
+                        "option"
+                    );
+
+                option.value =
+                    item.name;
+
+                option.textContent =
+                    item.name +
+                    " (" +
+                    item.count +
+                    ")";
+
+                testTopic.appendChild(
+                    option
+                );
+            }
+        );
+
+    if (
+        Array.from(
+            testTopic.options
+        ).some(
+            option =>
+                option.value ===
+                preferred
+        )
+    ) {
+        testTopic.value =
+            preferred;
+    }
+}
+
+
+async function loadTestCatalog() {
+    renderOwnerPaperPanel();
+
+    if (!dentoraAccessCode) {
+        showBetaGate(
+            "Enter your Dentora access code to open Test Mode."
+        );
+        return;
+    }
+
+    try {
+        const response =
+            await fetch(
+                TEST_CATALOG_API,
+                {
+                    headers:
+                        betaHeaders(false),
+                    cache:
+                        "no-store"
+                }
+            );
+
+        if (!response.ok) {
+            if (
+                response.status === 401
+            ) {
+                clearBetaAccess();
+                showBetaGate(
+                    "Enter a valid Dentora access code."
+                );
+            }
+
+            throw new Error(
+                "Question bank could not be loaded."
+            );
+        }
+
+        testCatalog =
+            await response.json();
+
+        bankPaperCount.textContent =
+            String(
+                testCatalog.paper_count ||
+                0
+            );
+
+        bankQuestionCount.textContent =
+            String(
+                testCatalog.question_count ||
+                0
+            );
+
+        bankEligibleCount.textContent =
+            String(
+                testCatalog
+                    .eligible_test_questions ||
+                0
+            );
+
+        bankRepeatedCount.textContent =
+            String(
+                testCatalog
+                    .repeated_question_groups ||
+                0
+            );
+
+        populateTestFilters();
+        renderReadinessDashboard();
+
+    } catch (error) {
+        console.error(
+            "Test catalog error:",
+            error
+        );
+
+        showToast(
+            error.message ||
+            "Question bank could not be loaded.",
+            "error"
+        );
+    }
+}
+
+
+/* =========================================================
+   PAST PAPER INGESTION
+========================================================= */
+
+async function ingestPastPaper() {
+    const file =
+        pastPaperFile.files[0];
+
+    const subject =
+        pastPaperSubject.value.trim();
+
+    if (!ownerAccessCode) {
+        showToast(
+            "Owner access is required to add past papers.",
+            "error"
+        );
+        return;
+    }
+
+    if (!file) {
+        showToast(
+            "Choose a past-paper PDF first.",
+            "error"
+        );
+        return;
+    }
+
+    if (!subject) {
+        showToast(
+            "Enter the paper subject.",
+            "error"
+        );
+        return;
+    }
+
+    ingestPastPaperButton.disabled =
+        true;
+
+    pastPaperProgress.textContent =
+        "Structuring questions from the paper…";
+
+    try {
+        const formData =
+            new FormData();
+
+        formData.append(
+            "file",
+            file
+        );
+
+        formData.append(
+            "subject",
+            subject
+        );
+
+        formData.append(
+            "year",
+            pastPaperYear.value.trim()
+        );
+
+        formData.append(
+            "title",
+            pastPaperTitle.value.trim()
+        );
+
+        const response =
+            await fetch(
+                PAST_PAPER_INGEST_API,
+                {
+                    method: "POST",
+                    headers:
+                        betaHeaders(false),
+                    body:
+                        formData
+                }
+            );
+
+        if (!response.ok) {
+            let detail =
+                "Past-paper structuring failed.";
+
+            try {
+                const data =
+                    await response.json();
+
+                if (
+                    data &&
+                    typeof data.detail ===
+                        "string"
+                ) {
+                    detail =
+                        data.detail;
+                }
+            } catch (_) {}
+
+            throw new Error(detail);
+        }
+
+        const data =
+            await response.json();
+
+        let pending =
+            Number(
+                data.pending_count ||
+                0
+            );
+
+        const initial =
+            pending;
+
+        pastPaperProgress.textContent =
+            "Structured " +
+            data.question_count +
+            " questions. Cross-checking MCQs against textbook evidence…";
+
+        while (pending > 0) {
+            const verifyResponse =
+                await fetch(
+                    API_BASE +
+                    "/past-papers/" +
+                    encodeURIComponent(
+                        data.paper_id
+                    ) +
+                    "/verify?batch_size=4",
+                    {
+                        method: "POST",
+                        headers:
+                            betaHeaders(false)
+                    }
+                );
+
+            if (!verifyResponse.ok) {
+                throw new Error(
+                    "Cross-checking paused because the verification service returned an error."
+                );
+            }
+
+            const verification =
+                await verifyResponse.json();
+
+            pending =
+                Number(
+                    verification
+                        .pending_count ||
+                    0
+                );
+
+            const done =
+                initial -
+                pending;
+
+            pastPaperProgress.textContent =
+                "Cross-checking answers… " +
+                done +
+                " of " +
+                initial +
+                " processed.";
+
+            if (
+                verification.processed === 0 &&
+                pending > 0
+            ) {
+                throw new Error(
+                    "Cross-checking could not progress. Try again after checking the AI provider."
+                );
+            }
+        }
+
+        pastPaperProgress.textContent =
+            "Past paper structured and cross-checked. It is ready for Test Mode.";
+
+        showToast(
+            "Past paper added to the test bank."
+        );
+
+        pastPaperFile.value = "";
+        pastPaperTitle.value = "";
+
+        await loadTestCatalog();
+
+    } catch (error) {
+        console.error(
+            "Past-paper ingestion error:",
+            error
+        );
+
+        pastPaperProgress.textContent =
+            error.message ||
+            "Past-paper processing failed.";
+
+        showToast(
+            pastPaperProgress.textContent,
+            "error"
+        );
+
+    } finally {
+        ingestPastPaperButton.disabled =
+            false;
+    }
+}
+
+
+/* =========================================================
+   ACTIVE TEST
+========================================================= */
+
+function stopTestTimer() {
+    if (activeTestTimer) {
+        clearInterval(
+            activeTestTimer
+        );
+
+        activeTestTimer =
+            null;
+    }
+}
+
+
+function updateTestTimer() {
+    if (!activeTest) {
+        return;
+    }
+
+    const elapsed =
+        Math.floor(
+            (
+                Date.now() -
+                activeTestStartedAt
+            ) /
+            1000
+        );
+
+    const remaining =
+        Math.max(
+            0,
+            activeTestDurationSeconds -
+            elapsed
+        );
+
+    const minutes =
+        Math.floor(
+            remaining /
+            60
+        );
+
+    const seconds =
+        remaining %
+        60;
+
+    testTimer.textContent =
+        String(minutes)
+            .padStart(2, "0") +
+        ":" +
+        String(seconds)
+            .padStart(2, "0");
+
+    if (remaining <= 0) {
+        stopTestTimer();
+        submitActiveTest(true);
+    }
+}
+
+
+function renderActiveTestQuestion() {
+    if (
+        !activeTest ||
+        !Array.isArray(
+            activeTest.questions
+        ) ||
+        activeTest.questions.length === 0
+    ) {
+        return;
+    }
+
+    const question =
+        activeTest.questions[
+            activeTestIndex
+        ];
+
+    const selected =
+        activeTestAnswers[
+            question.id
+        ] || "";
+
+    const optionHtml =
+        Object.entries(
+            question.options || {}
+        )
+            .map(
+                entry => {
+                    const label =
+                        String(entry[0]);
+
+                    const value =
+                        String(entry[1]);
+
+                    const selectedClass =
+                        selected === label
+                            ? " selected"
+                            : "";
+
+                    return (
+                        '<button type="button" class="test-option' +
+                        selectedClass +
+                        '" data-answer="' +
+                        escapeHtml(label) +
+                        '">' +
+                        '<strong>' +
+                        escapeHtml(label) +
+                        '.</strong><span>' +
+                        escapeHtml(value) +
+                        '</span></button>'
+                    );
+                }
+            )
+            .join("");
+
+    testQuestionCard.innerHTML =
+        '<div class="test-question-meta">' +
+        escapeHtml(
+            question.subject || ""
+        ) +
+        " · " +
+        escapeHtml(
+            question.topic || ""
+        ) +
+        (
+            Number(
+                question.repeat_count ||
+                1
+            ) > 1
+                ? (
+                    " · Repeated ×" +
+                    escapeHtml(
+                        question.repeat_count
+                    )
+                )
+                : ""
+        ) +
+        '</div>' +
+        '<div class="test-question-stem">' +
+        escapeHtml(
+            question.stem
+        ) +
+        '</div>' +
+        '<div class="test-options">' +
+        optionHtml +
+        '</div>';
+
+    testQuestionCard
+        .querySelectorAll(
+            ".test-option"
+        )
+        .forEach(
+            button => {
+                button.addEventListener(
+                    "click",
+                    function() {
+                        activeTestAnswers[
+                            question.id
+                        ] =
+                            button.dataset.answer;
+
+                        renderActiveTestQuestion();
+                    }
+                );
+            }
+        );
+
+    const answered =
+        Object.keys(
+            activeTestAnswers
+        ).filter(
+            id =>
+                activeTestAnswers[id]
+        ).length;
+
+    testProgress.textContent =
+        "Question " +
+        (
+            activeTestIndex +
+            1
+        ) +
+        " of " +
+        activeTest.questions.length +
+        " · " +
+        answered +
+        " answered";
+
+    testPreviousButton.disabled =
+        activeTestIndex === 0;
+
+    testNextButton.disabled =
+        activeTestIndex >=
+        activeTest.questions.length - 1;
+}
+
+
+async function startPastPaperTest() {
+    if (!dentoraAccessCode) {
+        showBetaGate(
+            "Enter your Dentora access code before starting a test."
+        );
+        return;
+    }
+
+    startTestButton.disabled =
+        true;
+
+    try {
+        const strategy =
+            testStrategy.value;
+
+        const weakTopics =
+            strategy === "weak"
+                ? weakTopicNames()
+                : [];
+
+        const response =
+            await fetch(
+                TEST_START_API,
+                {
+                    method: "POST",
+                    headers:
+                        betaHeaders(true),
+                    body:
+                        JSON.stringify({
+                            count:
+                                Math.max(
+                                    1,
+                                    Math.min(
+                                        100,
+                                        Number(
+                                            testQuestionCount.value ||
+                                            20
+                                        )
+                                    )
+                                ),
+                            subject:
+                                testSubject.value ||
+                                null,
+                            year:
+                                testYear.value ||
+                                null,
+                            topic:
+                                testTopic.value ||
+                                null,
+                            repeated_only:
+                                strategy ===
+                                "repeated",
+                            weak_topics:
+                                weakTopics
+                        })
+                }
+            );
+
+        if (!response.ok) {
+            throw new Error(
+                "Dentora could not create this test."
+            );
+        }
+
+        const data =
+            await response.json();
+
+        if (
+            !Array.isArray(
+                data.questions
+            ) ||
+            data.questions.length === 0
+        ) {
+            throw new Error(
+                "No cross-checked questions match those filters yet."
+            );
+        }
+
+        activeTest = {
+            questions:
+                data.questions
+        };
+
+        activeTestIndex = 0;
+        activeTestAnswers = {};
+        activeTestStartedAt =
+            Date.now();
+
+        activeTestDurationSeconds =
+            Math.max(
+                60,
+                Math.min(
+                    240 * 60,
+                    Number(
+                        testDuration.value ||
+                        25
+                    ) *
+                    60
+                )
+            );
+
+        testDashboard.style.display =
+            "none";
+
+        testResults.classList.remove(
+            "show"
+        );
+
+        testSession.classList.add(
+            "show"
+        );
+
+        renderActiveTestQuestion();
+
+        stopTestTimer();
+
+        activeTestTimer =
+            setInterval(
+                updateTestTimer,
+                1000
+            );
+
+        updateTestTimer();
+
+    } catch (error) {
+        showToast(
+            error.message ||
+            "Could not start the test.",
+            "error"
+        );
+
+    } finally {
+        startTestButton.disabled =
+            false;
+    }
+}
+
+
+function storeTestAttempt(
+    grade,
+    durationSeconds
+) {
+    const attempt = {
+        completed_at:
+            Date.now(),
+        total:
+            grade.total,
+        correct:
+            grade.correct,
+        score_percent:
+            grade.score_percent,
+        duration_seconds:
+            durationSeconds,
+        question_ids:
+            (
+                grade.details || []
+            ).map(
+                item =>
+                    item.question_id
+            ),
+        items:
+            (
+                grade.details || []
+            ).map(
+                item => ({
+                    question_id:
+                        item.question_id,
+                    topic:
+                        item.topic,
+                    subject:
+                        item.subject,
+                    correct:
+                        Boolean(
+                            item.correct
+                        ),
+                    repeat_count:
+                        Number(
+                            item.repeat_count ||
+                            1
+                        )
+                })
+            )
+    };
+
+    testHistory.unshift(
+        attempt
+    );
+
+    testHistory =
+        testHistory.slice(
+            0,
+            40
+        );
+
+    saveTestHistory();
+}
+
+
+function renderTestResults(
+    grade,
+    durationSeconds
+) {
+    testDashboard.style.display =
+        "none";
+
+    testSession.classList.remove(
+        "show"
+    );
+
+    testResults.classList.add(
+        "show"
+    );
+
+    const averageSeconds =
+        grade.total
+            ? Math.round(
+                durationSeconds /
+                grade.total
+            )
+            : 0;
+
+    const reviews =
+        (
+            grade.details || []
+        )
+            .map(
+                (item, index) => {
+                    const statusClass =
+                        item.correct
+                            ? "correct"
+                            : "wrong";
+
+                    const sourceText =
+                        (
+                            Array.isArray(
+                                item.verification_sources
+                            )
+                                ? item.verification_sources
+                                : []
+                        )
+                            .slice(0, 2)
+                            .map(
+                                source => {
+                                    const name =
+                                        source.title ||
+                                        source.filename ||
+                                        "Textbook";
+
+                                    return (
+                                        name +
+                                        (
+                                            source.page
+                                                ? (
+                                                    " p." +
+                                                    source.page
+                                                )
+                                                : ""
+                                        )
+                                    );
+                                }
+                            )
+                            .join("; ");
+
+                    return (
+                        '<div class="test-review-item ' +
+                        statusClass +
+                        '">' +
+                        '<div class="test-review-title">' +
+                        (
+                            index + 1
+                        ) +
+                        ". " +
+                        escapeHtml(
+                            item.stem
+                        ) +
+                        '</div>' +
+                        '<div class="test-review-detail">' +
+                        "Your answer: " +
+                        escapeHtml(
+                            item.chosen_answer ||
+                            "Unanswered"
+                        ) +
+                        " · Correct: " +
+                        escapeHtml(
+                            item.correct_answer ||
+                            "Not verified"
+                        ) +
+                        " · Topic: " +
+                        escapeHtml(
+                            item.topic ||
+                            "Unclassified"
+                        ) +
+                        (
+                            item.verification_status ===
+                            "conflict"
+                                ? " · ⚠ Past-paper key conflict"
+                                : ""
+                        ) +
+                        (
+                            sourceText
+                                ? (
+                                    " · Evidence: " +
+                                    escapeHtml(
+                                        sourceText
+                                    )
+                                )
+                                : ""
+                        ) +
+                        '</div>' +
+                        (
+                            item.verification_rationale
+                                ? (
+                                    '<div class="test-review-detail">' +
+                                    escapeHtml(
+                                        item.verification_rationale
+                                    ) +
+                                    '</div>'
+                                )
+                                : ""
+                        ) +
+                        '</div>'
+                    );
+                }
+            )
+            .join("");
+
+    testResults.innerHTML =
+        '<div class="test-hero">' +
+        '<h2>Test complete</h2>' +
+        '<p>Your results are based on cross-checked question-bank answers. This does not infer a class percentile.</p>' +
+        '<div class="test-result-grid">' +
+        '<div class="test-stat-card"><div class="test-stat-label">Score</div><div class="test-stat-value">' +
+        escapeHtml(
+            grade.score_percent
+        ) +
+        '%</div></div>' +
+        '<div class="test-stat-card"><div class="test-stat-label">Correct</div><div class="test-stat-value">' +
+        escapeHtml(
+            grade.correct
+        ) +
+        '/' +
+        escapeHtml(
+            grade.total
+        ) +
+        '</div></div>' +
+        '<div class="test-stat-card"><div class="test-stat-label">Unanswered</div><div class="test-stat-value">' +
+        escapeHtml(
+            grade.unanswered
+        ) +
+        '</div></div>' +
+        '<div class="test-stat-card"><div class="test-stat-label">Avg time / question</div><div class="test-stat-value">' +
+        escapeHtml(
+            averageSeconds
+        ) +
+        's</div></div>' +
+        '</div>' +
+        '</div>' +
+        '<div class="test-panel"><h3>Question review</h3>' +
+        (
+            reviews ||
+            '<div class="test-empty">No graded questions were returned.</div>'
+        ) +
+        '</div>' +
+        '<div class="test-actions">' +
+        '<button class="test-primary" id="backToTestCentreButton" type="button">Back to Test Centre</button>' +
+        '</div>';
+
+    const backButton =
+        document.getElementById(
+            "backToTestCentreButton"
+        );
+
+    if (backButton) {
+        backButton.addEventListener(
+            "click",
+            function() {
+                testResults.classList.remove(
+                    "show"
+                );
+
+                testDashboard.style.display =
+                    "block";
+
+                activeTest = null;
+                renderReadinessDashboard();
+                loadTestCatalog();
+            }
+        );
+    }
+}
+
+
+async function submitActiveTest(
+    timedOut = false
+) {
+    if (
+        !activeTest ||
+        !Array.isArray(
+            activeTest.questions
+        )
+    ) {
+        return;
+    }
+
+    stopTestTimer();
+
+    submitTestButton.disabled =
+        true;
+
+    try {
+        const responses =
+            activeTest.questions.map(
+                question => ({
+                    question_id:
+                        question.id,
+                    answer:
+                        activeTestAnswers[
+                            question.id
+                        ] || ""
+                })
+            );
+
+        const response =
+            await fetch(
+                TEST_GRADE_API,
+                {
+                    method: "POST",
+                    headers:
+                        betaHeaders(true),
+                    body:
+                        JSON.stringify({
+                            responses:
+                                responses
+                        })
+                }
+            );
+
+        if (!response.ok) {
+            throw new Error(
+                "Dentora could not grade this test."
+            );
+        }
+
+        const grade =
+            await response.json();
+
+        const durationSeconds =
+            Math.max(
+                1,
+                Math.round(
+                    (
+                        Date.now() -
+                        activeTestStartedAt
+                    ) /
+                    1000
+                )
+            );
+
+        storeTestAttempt(
+            grade,
+            durationSeconds
+        );
+
+        renderTestResults(
+            grade,
+            durationSeconds
+        );
+
+        if (timedOut) {
+            showToast(
+                "Time expired — your test was submitted."
+            );
+        }
+
+    } catch (error) {
+        showToast(
+            error.message ||
+            "The test could not be submitted.",
+            "error"
+        );
+
+        if (activeTest) {
+            activeTestTimer =
+                setInterval(
+                    updateTestTimer,
+                    1000
+                );
+        }
+
+    } finally {
+        submitTestButton.disabled =
+            false;
+    }
+}
+
+
+/* =========================================================
    TOAST
 ========================================================= */
 
