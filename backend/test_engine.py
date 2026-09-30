@@ -693,6 +693,7 @@ class PastPaperStore:
                 and (
                     item.get("verified_answer")
                     or item.get("provided_answer")
+                    or item.get("provisional_answer")
                 )
             )
         ]

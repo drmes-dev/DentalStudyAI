@@ -21,6 +21,21 @@ jobs:
         run: |
           python -m py_compile backend/main.py backend/rag.py backend/test_engine.py tools/index_library.py
 
+      - name: Guard scanned-MCQ test readiness
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          text = Path("backend/test_engine.py").read_text(encoding="utf-8")
+          start = text.index("    def sample_test(")
+          end = text.index("    def grade(", start)
+          block = text[start:end]
+          assert 'item.get("provisional_answer")' in block, (
+              "sample_test must allow OCR/provisional answers so scanned MCQs "
+              "can be used immediately"
+          )
+          print("Scanned-MCQ readiness regression check passed")
+          PY
+
       - name: Install backend runtime dependencies
         run: python -m pip install -r requirements.txt
 
