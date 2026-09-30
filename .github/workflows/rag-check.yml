@@ -34,6 +34,9 @@ jobs:
           Path("/tmp/dentora-frontend.js").write_text(script, encoding="utf-8")
           PY
 
+      - name: Test Pinecone ID listing (offline mocks)
+        run: python -m unittest discover -s tests -v
+
       - name: Check frontend JavaScript syntax
         run: node --check /tmp/dentora-frontend.js
 
