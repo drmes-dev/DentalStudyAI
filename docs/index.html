@@ -3527,6 +3527,14 @@ a.source-card:hover {
                             >
                                 Structure & cross-check
                             </button>
+
+                            <button
+                                class="test-secondary"
+                                id="importExistingPastPapersButton"
+                                type="button"
+                            >
+                                Import already indexed past papers
+                            </button>
                         </div>
 
                         <div
@@ -3771,7 +3779,7 @@ a.source-card:hover {
    DENTORA CONFIGURATION
 ========================================================= */
 
-window.DENTORA_BUILD = "2026-09-30-test-mode-v1";
+window.DENTORA_BUILD = "2026-09-30-test-mode-legacy-import-v2";
 
 const API_BASE =
     "https://dentalstudyai.onrender.com";
@@ -3796,6 +3804,9 @@ const TRANSCRIBE_API =
 
 const PAST_PAPER_INGEST_API =
     API_BASE + "/past-papers/ingest-pdf";
+
+const PAST_PAPER_IMPORT_API =
+    API_BASE + "/past-papers/import-existing";
 
 const TEST_CATALOG_API =
     API_BASE + "/test/catalog";
@@ -3838,6 +3849,8 @@ let activeTestAnswers = {};
 let activeTestStartedAt = 0;
 let activeTestDurationSeconds = 0;
 let activeTestTimer = null;
+let legacyPastPaperImportRunning = false;
+let legacyPastPaperImportAttempted = false;
 
 let ownerAccessCode =
     localStorage.getItem(
@@ -4001,6 +4014,8 @@ const pastPaperTitle =
     document.getElementById("pastPaperTitle");
 const ingestPastPaperButton =
     document.getElementById("ingestPastPaperButton");
+const importExistingPastPapersButton =
+    document.getElementById("importExistingPastPapersButton");
 const pastPaperProgress =
     document.getElementById("pastPaperProgress");
 const readinessScore =
@@ -5011,7 +5026,9 @@ function populateTestTopics(
 }
 
 
-async function loadTestCatalog() {
+async function loadTestCatalog(
+    allowLegacyImport = true
+) {
     renderOwnerPaperPanel();
 
     if (!dentoraAccessCode) {
@@ -5080,6 +5097,19 @@ async function loadTestCatalog() {
         populateTestFilters();
         renderReadinessDashboard();
 
+        if (
+            ownerAccessCode &&
+            allowLegacyImport &&
+            !legacyPastPaperImportAttempted
+        ) {
+            legacyPastPaperImportAttempted =
+                true;
+
+            await importExistingPastPapers(
+                true
+            );
+        }
+
     } catch (error) {
         console.error(
             "Test catalog error:",
@@ -5091,6 +5121,240 @@ async function loadTestCatalog() {
             "Question bank could not be loaded.",
             "error"
         );
+    }
+}
+
+
+/* =========================================================
+   LEGACY PAST-PAPER MIGRATION
+========================================================= */
+
+async function crossCheckImportedPaper(
+    paper,
+    label = "past paper"
+) {
+    let pending =
+        Number(
+            paper.pending_count ||
+            0
+        );
+
+    const initial =
+        pending;
+
+    while (pending > 0) {
+        const verifyResponse =
+            await fetch(
+                API_BASE +
+                "/past-papers/" +
+                encodeURIComponent(
+                    paper.paper_id
+                ) +
+                "/verify?batch_size=4",
+                {
+                    method: "POST",
+                    headers:
+                        betaHeaders(false)
+                }
+            );
+
+        if (!verifyResponse.ok) {
+            throw new Error(
+                "Cross-checking paused while processing " +
+                label +
+                "."
+            );
+        }
+
+        const verification =
+            await verifyResponse.json();
+
+        pending =
+            Number(
+                verification
+                    .pending_count ||
+                0
+            );
+
+        const done =
+            initial -
+            pending;
+
+        pastPaperProgress.textContent =
+            "Cross-checking " +
+            label +
+            "… " +
+            done +
+            " of " +
+            initial +
+            " processed.";
+
+        if (
+            verification.processed === 0 &&
+            pending > 0
+        ) {
+            throw new Error(
+                "Cross-checking could not progress for " +
+                label +
+                "."
+            );
+        }
+    }
+}
+
+
+async function importExistingPastPapers(
+    automatic = false
+) {
+    if (
+        !ownerAccessCode ||
+        legacyPastPaperImportRunning
+    ) {
+        return;
+    }
+
+    legacyPastPaperImportRunning =
+        true;
+
+    importExistingPastPapersButton.disabled =
+        true;
+
+    pastPaperProgress.textContent =
+        automatic
+            ? "Checking your existing RAG library for previously uploaded past papers…"
+            : "Importing previously indexed past papers into Test Mode…";
+
+    let importedCount = 0;
+
+    try {
+        for (
+            let pass = 0;
+            pass < 12;
+            pass += 1
+        ) {
+            const response =
+                await fetch(
+                    PAST_PAPER_IMPORT_API,
+                    {
+                        method: "POST",
+                        headers:
+                            betaHeaders(false)
+                    }
+                );
+
+            if (!response.ok) {
+                let detail =
+                    "Existing past-paper import failed.";
+
+                try {
+                    const errorData =
+                        await response.json();
+
+                    if (
+                        errorData &&
+                        typeof errorData.detail ===
+                            "string"
+                    ) {
+                        detail =
+                            errorData.detail;
+                    }
+                } catch (_) {}
+
+                throw new Error(detail);
+            }
+
+            const data =
+                await response.json();
+
+            if (!data.imported) {
+                break;
+            }
+
+            importedCount += 1;
+
+            const paperLabel =
+                data.title ||
+                data.filename ||
+                (
+                    "past paper " +
+                    importedCount
+                );
+
+            pastPaperProgress.textContent =
+                "Imported " +
+                paperLabel +
+                " with " +
+                data.question_count +
+                " structured questions. Cross-checking…";
+
+            await crossCheckImportedPaper(
+                data,
+                paperLabel
+            );
+        }
+
+        if (importedCount > 0) {
+            pastPaperProgress.textContent =
+                "Imported and cross-checked " +
+                importedCount +
+                " existing past paper" +
+                (
+                    importedCount === 1
+                        ? ""
+                        : "s"
+                ) +
+                ". Test Mode is refreshing…";
+
+            showToast(
+                importedCount +
+                " existing past paper" +
+                (
+                    importedCount === 1
+                        ? ""
+                        : "s"
+                ) +
+                " added to the question bank."
+            );
+
+            await loadTestCatalog(
+                false
+            );
+        } else {
+            pastPaperProgress.textContent =
+                (
+                    testCatalog &&
+                    Number(
+                        testCatalog.question_count ||
+                        0
+                    ) > 0
+                )
+                    ? "Existing indexed past papers are already synchronized with Test Mode."
+                    : "No additional indexed Past Papers were detected. If a paper was indexed under another category, use the Test Mode uploader once to classify it correctly.";
+        }
+
+    } catch (error) {
+        console.error(
+            "Existing past-paper migration error:",
+            error
+        );
+
+        pastPaperProgress.textContent =
+            error.message ||
+            "Existing past-paper import failed.";
+
+        if (!automatic) {
+            showToast(
+                pastPaperProgress.textContent,
+                "error"
+            );
+        }
+
+    } finally {
+        legacyPastPaperImportRunning =
+            false;
+
+        importExistingPastPapersButton.disabled =
+            false;
     }
 }
 
@@ -7841,6 +8105,19 @@ refreshTestBankButton.addEventListener(
 ingestPastPaperButton.addEventListener(
     "click",
     ingestPastPaper
+);
+
+
+importExistingPastPapersButton.addEventListener(
+    "click",
+    function() {
+        legacyPastPaperImportAttempted =
+            true;
+
+        importExistingPastPapers(
+            false
+        );
+    }
 );
 
 
