@@ -23,7 +23,7 @@ footer{margin-top:26px;color:#687f96;font-size:12px}
 <div class="meta">Beta notice · Updated 30 September 2026</div>
 <p>This notice explains how the current Dentora beta handles study prompts, chat history, and PDF uploads.</p>
 <h2>What the browser stores</h2>
-<p>Recent chats and a random browser session identifier are stored in your browser's local storage. They are not currently synced to a Dentora account. Clearing browser data or using another device may remove access to that local history.</p>
+<p>Recent chats, a random browser session identifier, and your local Test Mode attempt history are stored in your browser's local storage. Test history is used to calculate your personal readiness metrics and weak-topic trends. These records are not currently synced to a Dentora account. Clearing browser data or using another device may remove access to that local history.</p>
 <h2>What the backend processes</h2>
 <p>When you ask a question, the prompt is sent to the Dentora backend. Relevant textbook or uploaded-PDF excerpts may be included in a model request so that Dentora can generate a source-aware answer.</p>
 <h2>Voice questions</h2>
@@ -34,6 +34,8 @@ footer{margin-top:26px;color:#687f96;font-size:12px}
 <p>Dentora uses external infrastructure and AI providers. Prompts and the limited excerpts needed to answer them may be processed by the configured providers. Hosting and AI providers may maintain their own security and operational logs under their respective policies.</p>
 <h2>Permanent study library</h2>
 <p>Dentora also has an administrator-managed retrieval library used to support cited study answers. Ordinary PDF Tutor uploads are not automatically added to this permanent library.</p>
+<h2>Past-paper question bank</h2>
+<p>Past papers deliberately added by the owner through Test Mode may be converted into structured question records and stored in Dentora's persistent question bank. MCQ answers may be cross-checked against retrieved textbook evidence. The original PDF is processed for structuring; ordinary student PDF Tutor uploads are not automatically converted into test-bank records.</p>
 <h2>Do not upload sensitive information</h2>
 <p class="note">Do not upload patient records, personally identifiable clinical information, passwords, financial information, or other sensitive data. Dentora is an educational study tool, not a system for storing patient information.</p>
 <h2>Private beta access</h2>
