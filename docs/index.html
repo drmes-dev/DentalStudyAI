@@ -615,14 +615,21 @@ body {
     border-radius: 10px;
 }
 
+.chat-history-row {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    margin-bottom: 4px;
+}
+
 .chat-item {
     display: flex;
     align-items: center;
     gap: 8px;
 
-    width: 100%;
+    flex: 1;
+    min-width: 0;
     padding: 10px;
-    margin-bottom: 4px;
 
     border: 1px solid transparent;
     border-radius: 11px;
@@ -653,6 +660,37 @@ body {
     white-space: nowrap;
 
     font-size: 11px;
+}
+
+.chat-delete {
+    display: grid;
+    place-items: center;
+    flex: 0 0 32px;
+    width: 32px;
+    height: 34px;
+    padding: 7px;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+}
+
+.chat-delete:hover {
+    color: #fda4af;
+    background: rgba(251,113,133,.12);
+}
+
+.chat-item:focus-visible,
+.chat-delete:focus-visible,
+.toast-action:focus-visible {
+    outline: 2px solid #80dcff;
+    outline-offset: 2px;
+}
+
+.chat-delete svg {
+    width: 16px;
+    height: 16px;
 }
 
 .empty-history {
@@ -2822,6 +2860,17 @@ a.source-card:hover {
     border-color: rgba(74,222,128,.2);
 }
 
+.toast-action {
+    margin-left: 12px;
+    padding: 4px 7px;
+    border: 1px solid var(--border-light);
+    border-radius: 6px;
+    background: transparent;
+    color: #80dcff;
+    cursor: pointer;
+    font: inherit;
+}
+
 
 @media (prefers-reduced-motion: reduce) {
     *,
@@ -4442,6 +4491,7 @@ function saveHistory() {
             "dentora_chat_history",
             JSON.stringify(chatHistory)
         );
+        return true;
 
     } catch (error) {
 
@@ -4449,6 +4499,7 @@ function saveHistory() {
             "History save error:",
             error
         );
+        return false;
 
     }
 
@@ -6245,7 +6296,8 @@ async function submitActiveTest(
 
 function showToast(
     message,
-    type = "success"
+    type = "success",
+    action = null
 ) {
 
     const toast =
@@ -6256,6 +6308,19 @@ function showToast(
 
     toast.textContent =
         message;
+
+    toast.setAttribute("role", "status");
+    if (action) {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "toast-action";
+        button.textContent = action.label;
+        button.addEventListener("click", () => {
+            action.run();
+            toast.remove();
+        }, { once: true });
+        toast.appendChild(button);
+    }
 
     toastContainer.appendChild(toast);
 
@@ -6269,7 +6334,7 @@ function showToast(
             toast.remove();
         }, 250);
 
-    }, 3000);
+    }, action ? 10000 : 3000);
 
 }
 
@@ -7268,6 +7333,9 @@ function renderHistory() {
     chatHistory.forEach(
         chat => {
 
+            const row = document.createElement("div");
+            row.className = "chat-history-row";
+
             const item =
                 document.createElement("button");
 
@@ -7323,13 +7391,61 @@ function renderHistory() {
             );
 
 
-            history.appendChild(
-                item
-            );
+            const remove = document.createElement("button");
+            remove.type = "button";
+            remove.className = "chat-delete";
+            remove.title = "Delete chat";
+            remove.setAttribute("aria-label", "Delete chat: " + chat.title);
+            remove.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M9 6V4h6v2M5 6l1 14h12l1-14M10 10v6M14 10v6"/></svg>';
+            remove.addEventListener("click", () => deleteChat(chat.id));
+            row.append(item, remove);
+            history.appendChild(row);
 
         }
     );
 
+}
+
+
+function deleteChat(id) {
+    const chat = chatHistory.find(item => item.id === id);
+    if (!chat) return;
+    const wasActive = currentChatId === id;
+    if (wasActive && isSending) {
+        showToast("Wait for this reply before deleting the chat.", "error");
+        return;
+    }
+    const previousHistory = chatHistory;
+    chatHistory = chatHistory.filter(item => item.id !== id);
+    if (!saveHistory()) {
+        chatHistory = previousHistory;
+        showToast("The chat could not be deleted. Please try again.", "error");
+        return;
+    }
+    if (wasActive) {
+        currentChatId = null;
+        currentMessages = [];
+        clearMessagesUI();
+        messageInput.value = "";
+        autoResize(messageInput);
+        if (currentMode !== "test") showWelcomeInterface();
+    }
+    renderHistory();
+    showToast("Chat deleted.", "success", {
+        label: "Undo",
+        run: () => {
+            const beforeUndo = chatHistory;
+            chatHistory = [chat, ...chatHistory.filter(item => item.id !== id)]
+                .sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 30);
+            if (!saveHistory()) {
+                chatHistory = beforeUndo;
+                showToast("The chat could not be restored.", "error");
+                return;
+            }
+            if (wasActive && currentChatId === null && currentMode !== "test") loadChat(id);
+            else renderHistory();
+        }
+    });
 }
 
 
