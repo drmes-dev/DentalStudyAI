@@ -672,6 +672,8 @@ Return ONLY a JSON array. Each item must have exactly these fields:
 - page
 - marks
 - provided_answer
+- suggested_answer
+- suggested_confidence
 
 RULES
 -----
@@ -680,19 +682,24 @@ RULES
    {{"A":"...","B":"...","C":"...","D":"..."}}.
 3. If options are not present, use an empty object.
 4. "provided_answer" must be blank unless an answer/key is explicitly visible
-   in the supplied paper text. Never invent an answer.
-5. "page" is the PDF page number indicated by the nearest PDF PAGE marker.
-6. Classify topic and subtopic concisely for BDS revision.
-7. question_type should be one of:
+   in the supplied paper text. Never invent a paper answer key.
+5. For an MCQ, "suggested_answer" may contain the single best option label
+   (A/B/C/D/etc.) using standard undergraduate dental knowledge. Leave it
+   blank if the OCR/options are too damaged or genuinely ambiguous.
+6. "suggested_confidence" must be high, moderate, or low for a suggested
+   answer, otherwise blank.
+7. "page" is the PDF page number indicated by the nearest PDF PAGE marker.
+8. Classify topic and subtopic concisely for BDS revision.
+9. question_type should be one of:
    mcq, true_false, emq, short_answer, essay, osce, other.
-8. Do not convert headings, instructions, roll numbers, marks tables, or
+10. Do not convert headings, instructions, roll numbers, marks tables, or
    answer-key labels into questions.
-9. For scanned/OCR MCQs, join wrapped lines belonging to the same stem or
+11. For scanned/OCR MCQs, join wrapped lines belonging to the same stem or
    option. Accept recognizable option formats such as A., A), (A), a., 1.,
    1), or (1), and preserve their labels in the options object.
-10. If a question is incomplete in this excerpt, include it only when its stem
+12. If a question is incomplete in this excerpt, include it only when its stem
     and answer choices can be reconstructed directly from the supplied text.
-11. Return JSON only. No commentary and no Markdown.
+13. Return JSON only. No commentary and no Markdown.
 """
         generated = generate_with_fallback(prompt)
 
@@ -884,6 +891,83 @@ def _fallback_past_paper_subject(
             return subject
 
     return "BDS Past Paper"
+
+
+def looks_like_past_paper_pages(
+    pages: List[Dict[str, Any]],
+) -> bool:
+    """Recognize exam/MCQ pages from already-OCRed RAG text."""
+    text = "\n".join(
+        normalize_text(page.get("text", ""))
+        for page in pages
+        if normalize_text(page.get("text", ""))
+    )
+
+    if len(text) < 120:
+        return False
+
+    lower = text.lower()
+
+    exam_cues = (
+        "multiple choice",
+        "multiple-choice",
+        "mcq",
+        "mcqs",
+        "question paper",
+        "examination",
+        "exam",
+        "annual",
+        "professional",
+        "best answer",
+        "choose the correct",
+        "select the correct",
+        "which of the following",
+        "marks",
+        "time allowed",
+        "roll no",
+        "roll number",
+    )
+
+    cue_hits = sum(
+        1
+        for cue in exam_cues
+        if cue in lower
+    )
+
+    option_hits = len(
+        re.findall(
+            r"(?:^|\s)(?:\(?[a-eA-E]\)?[\)\].:\-]|"
+            r"\(?[1-5]\)?[\)\].:\-])\s*\S+",
+            text,
+        )
+    )
+
+    numbered_hits = len(
+        re.findall(
+            r"(?:^|\n|\s)\d{1,3}[\)\].:\-]\s*\S+",
+            text,
+        )
+    )
+
+    question_hits = (
+        text.count("?")
+        + len(
+            re.findall(
+                r"\b(?:which|what|when|where|why|how)\b",
+                lower,
+            )
+        )
+    )
+
+    return bool(
+        (option_hits >= 8 and numbered_hits >= 3)
+        or (option_hits >= 6 and cue_hits >= 2)
+        or (
+            cue_hits >= 3
+            and numbered_hits >= 4
+            and question_hits >= 2
+        )
+    )
 
 
 def infer_existing_past_paper_metadata(
@@ -1335,7 +1419,7 @@ OCR is too damaged or the item is genuinely ambiguous, return an empty answer.
 def root():
     return {
         "message": "Dentora backend is running.",
-        "version": "2.4.0-simple-past-paper-bank",
+        "version": "2.4.1-auto-detect-scanned-papers",
     }
 
 
@@ -2411,11 +2495,15 @@ def import_existing_past_paper(
 
     strong_candidates = []
     fallback_candidates = []
+    content_candidates = []
+    unknown_documents = []
 
     cue_pattern = re.compile(
         r"(past\s*paper|pastpaper|question\s*paper|annual\s*(exam|examination)|"
         r"supply\s*(exam|examination)|professional\s*(exam|examination)|"
-        r"university\s*(exam|examination)|previous\s*year|previous\s*paper)",
+        r"university\s*(exam|examination)|previous\s*year|previous\s*paper|"
+        r"ortho.*(?:mcq|paper|exam)|operative.*(?:mcq|paper|exam)|"
+        r"(?:mcq|paper|exam).*ortho|(?:mcq|paper|exam).*operative)",
         re.IGNORECASE,
     )
 
@@ -2452,9 +2540,6 @@ def import_existing_past_paper(
             f"{document.get('title', '')}"
         )
 
-        # Anything deliberately indexed as a Past Paper is automatically
-        # synchronized into Test Mode. The owner should never have to select
-        # the same PDF a second time.
         if (
             "past" in category_words
             and "paper" in category_words
@@ -2466,10 +2551,79 @@ def import_existing_past_paper(
             fallback_candidates.append(
                 document
             )
+        else:
+            unknown_documents.append(
+                document
+            )
+
+    # Older RAG uploads may have been saved under Books/Other. Inspect their
+    # already-OCRed chunks so scanned exam papers are still discovered.
+    if not (
+        strong_candidates
+        or fallback_candidates
+    ):
+        for document in unknown_documents:
+            doc_id = str(
+                document.get(
+                    "doc_id",
+                    "",
+                )
+            ).strip()
+
+            try:
+                sample_pages = (
+                    rag_store.document_sample_pages(
+                        doc_id,
+                        max_pages=12,
+                        max_chunks=48,
+                    )
+                )
+
+                if looks_like_past_paper_pages(
+                    sample_pages
+                ):
+                    content_candidates.append(
+                        document
+                    )
+                    continue
+
+                page_count = int(
+                    document.get(
+                        "pages",
+                        0,
+                    )
+                    or 0
+                )
+
+                if (
+                    sample_pages
+                    and 0 < page_count <= 220
+                ):
+                    inferred = (
+                        infer_existing_past_paper_metadata(
+                            document,
+                            sample_pages,
+                        )
+                    )
+
+                    if inferred.get(
+                        "is_past_paper"
+                    ):
+                        content_candidates.append(
+                            document
+                        )
+
+            except Exception as exc:
+                print(
+                    "Past-paper content detection warning:",
+                    doc_id,
+                    exc,
+                )
 
     candidates = (
         strong_candidates
         + fallback_candidates
+        + content_candidates
     )
 
     if not candidates:
@@ -2638,8 +2792,15 @@ def test_catalog(
             ):
                 rag_past_paper_count += 1
 
-        catalog["rag_past_paper_count"] = (
-            rag_past_paper_count
+        catalog["rag_past_paper_count"] = max(
+            rag_past_paper_count,
+            int(
+                catalog.get(
+                    "paper_count",
+                    0,
+                )
+                or 0
+            ),
         )
         catalog["rag_sync_complete"] = (
             catalog.get("paper_count", 0)
