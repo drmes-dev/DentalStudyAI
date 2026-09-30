@@ -445,11 +445,28 @@ model_availability = ModelAvailability()
 
 
 def generate_with_fallback(prompt: str, timeout_seconds: Optional[int] = None, json_response: bool = False) -> Dict[str, Any]:
-    # Same configured keys, additional documented free-tier models. Paper
-    # extraction prefers Qwen, reserving the larger GPT model for chat.
-    groq_models = ("qwen/qwen3.8-27b", "openai/gpt-oss-20b", "openai/gpt-oss-120b") if json_response else (
-        "openai/gpt-oss-120b", "openai/gpt-oss-20b", "qwen/qwen3.8-27b")
-    models = [("Gemini", "gemini-3.5-flash")] + [("Groq", model) for model in groq_models] + [("Qwen API", "qwen-plus")]
+    # Keep chat behaviour stable, but make structured past-paper work resilient
+    # across independent providers. Small/fast Qwen models are attempted before
+    # the larger fallbacks so one exhausted free-tier account does not stall the
+    # entire question-bank import.
+    if json_response:
+        models = [
+            ("Gemini", "gemini-3.5-flash"),
+            ("Groq", "qwen/qwen3.8-27b"),
+            ("Qwen API", "qwen-flash"),
+            ("Groq", "openai/gpt-oss-20b"),
+            ("Qwen API", "qwen-turbo"),
+            ("Groq", "openai/gpt-oss-120b"),
+            ("Qwen API", "qwen-plus"),
+        ]
+    else:
+        models = [
+            ("Gemini", "gemini-3.5-flash"),
+            ("Groq", "openai/gpt-oss-120b"),
+            ("Groq", "openai/gpt-oss-20b"),
+            ("Groq", "qwen/qwen3.8-27b"),
+            ("Qwen API", "qwen-plus"),
+        ]
     timeout = timeout_seconds or 45
     for provider, model in models:
         if model_availability.remaining(provider, model):
@@ -487,14 +504,27 @@ def generate_with_fallback(prompt: str, timeout_seconds: Optional[int] = None, j
         except Exception as exc:
             model_availability.failed(provider, model, exc)
 
-    if not timeout_seconds and os.getenv("DENTORA_LOCAL_AI", "").lower() == "true":
+    # Local Qwen is a true last-resort fallback whenever the backend is running
+    # on a machine with Ollama enabled. Do not disable it merely because a
+    # caller supplied a timeout (past-paper import always supplies one).
+    if os.getenv("DENTORA_LOCAL_AI", "").lower() == "true":
         try:
-            response = ollama.chat(model="qwen3:8b", messages=[{"role": "user", "content": prompt}])
-            content = response.get("message", {}).get("content", "")
-            if content:
-                return {"response": content, "provider": "Local Qwen"}
-        except Exception:
-            print("Local AI unavailable")
+            local_model = os.getenv("DENTORA_LOCAL_MODEL", "qwen3:8b").strip() or "qwen3:8b"
+            response = ollama.chat(
+                model=local_model,
+                messages=[{"role": "user", "content": prompt}],
+            )
+            local_content = response.get("message", {}).get("content", "")
+            if local_content:
+                if json_response:
+                    _json_payload(local_content, "object")
+                return {
+                    "response": local_content,
+                    "provider": "Local Qwen",
+                    "model": local_model,
+                }
+        except Exception as exc:
+            print("Local AI unavailable:", type(exc).__name__)
     return model_availability.unavailable(models)
 
 
@@ -620,6 +650,106 @@ def _past_paper_batches(
     return batches
 
 
+def _local_past_paper_mcqs(
+    pages: List[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    """Conservative no-AI MCQ parser used only when cloud structuring is unavailable.
+
+    It never invents an answer. A question is accepted only when a numbered
+    stem and at least two labelled A-E options can be recovered directly from
+    the OCR text. This lets page checkpoints keep moving during provider quota
+    outages while answer verification can happen later.
+    """
+    questions: List[Dict[str, Any]] = []
+    seen = set()
+
+    question_start = re.compile(
+        r"(?im)^\s*(?:q(?:uestion)?\s*)?(\d{1,3})\s*[\)\].:\-]\s*(?=\S)"
+    )
+    option_marker = re.compile(
+        r"(?i)(?<![A-Za-z0-9])\(?([A-E])\)?\s*[\)\].:\-]\s+(?=\S)"
+    )
+    answer_marker = re.compile(
+        r"(?i)\b(?:ans(?:wer)?|key)\s*[:=\-]?\s*\(?([A-E])\)?\b"
+    )
+
+    for page in pages:
+        text = normalize_text(page.get("text", ""))
+        if not text:
+            continue
+
+        starts = list(question_start.finditer(text))
+        if not starts:
+            continue
+
+        page_year = next(
+            iter(re.findall(r"\b(?:19|20)\d{2}\b", text)),
+            "Unknown",
+        )
+
+        for index, match in enumerate(starts):
+            segment_end = starts[index + 1].start() if index + 1 < len(starts) else len(text)
+            segment = text[match.end():segment_end].strip()
+            if len(segment) < 12:
+                continue
+
+            option_matches = list(option_marker.finditer(segment))
+            if len(option_matches) < 2:
+                continue
+
+            first_option = option_matches[0].start()
+            stem = normalize_text(segment[:first_option]).strip(" -:;")
+            if len(stem) < 8:
+                continue
+
+            options: Dict[str, str] = {}
+            for option_index, option_match in enumerate(option_matches):
+                label = option_match.group(1).upper()
+                value_end = (
+                    option_matches[option_index + 1].start()
+                    if option_index + 1 < len(option_matches)
+                    else len(segment)
+                )
+                value = normalize_text(segment[option_match.end():value_end])
+                # Keep a trailing printed answer marker out of the final option.
+                value = answer_marker.sub("", value).strip(" -:;")
+                if value and label not in options:
+                    options[label] = value[:1200]
+
+            if len(options) < 2:
+                continue
+
+            compact = re.sub(r"[^a-z0-9]+", " ", stem.lower()).strip()
+            if not compact or compact in seen:
+                continue
+            seen.add(compact)
+
+            printed = answer_marker.search(segment)
+            provided_answer = printed.group(1).upper() if printed else ""
+            if provided_answer not in options:
+                provided_answer = ""
+
+            questions.append({
+                "question_number": match.group(1),
+                "stem": stem,
+                "options": options,
+                "question_type": "mcq",
+                "topic": "Unclassified",
+                "subtopic": "",
+                "page": int(page.get("page", 0) or 0),
+                "marks": 0,
+                "provided_answer": provided_answer,
+                "suggested_answer": "",
+                "suggested_confidence": "",
+                "year": page_year,
+            })
+
+            if len(questions) >= 300:
+                return questions
+
+    return questions
+
+
 def parse_past_paper_questions(
     *,
     pages: List[Dict[str, Any]],
@@ -627,6 +757,7 @@ def parse_past_paper_questions(
 ) -> List[Dict[str, Any]]:
     questions: List[Dict[str, Any]] = []
     seen = set()
+    local_fallback = _local_past_paper_mcqs(pages)
 
     for batch in _past_paper_batches(pages):
         prompt = f"""
@@ -693,6 +824,12 @@ RULES
         generated = generate_with_fallback(prompt, timeout_seconds=60, json_response=True)
 
         if generated.get("provider") == "Error":
+            if local_fallback:
+                print(
+                    f"Past-paper AI unavailable; using conservative local OCR parser "
+                    f"for {len(local_fallback)} MCQs."
+                )
+                return local_fallback
             raise AIUnavailable(generated)
 
         parsed = _json_payload(
