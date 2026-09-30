@@ -58,7 +58,7 @@ function Set-DotEnvValue {
         $output += "$Name=$Value"
     }
 
-    Set-Content -LiteralPath $Path -Value $output -Encoding UTF8
+    Set-Content -LiteralPath $Path -Value $output -Encoding Ascii
 }
 
 function Get-DotEnvValue {
