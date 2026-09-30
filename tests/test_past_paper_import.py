@@ -131,6 +131,34 @@ class BackgroundImportTests(unittest.TestCase):
         self.assertEqual(result, [raw])
         self.assertTrue(generate.call_args.kwargs['json_response'])
 
+    def test_local_ocr_parser_keeps_mcq_import_moving_when_ai_is_unavailable(self):
+        unavailable = {
+            'provider': 'Error',
+            'response': 'Cloud AI unavailable',
+            'retry_after': 300,
+            'error_code': 'quota_reached',
+        }
+        page = {
+            'page': 4,
+            'text': (
+                '12. Which appliance is used for anchorage?\n'
+                'A. Nance appliance\n'
+                'B. Hawley retainer\n'
+                'C. Bite plane\n'
+                'D. Mouth guard\n'
+                'Answer: A'
+            ),
+        }
+        with patch.object(main, 'generate_with_fallback', return_value=unavailable):
+            result = main.parse_past_paper_questions(
+                pages=[page],
+                subject='Orthodontics',
+            )
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0]['stem'], 'Which appliance is used for anchorage?')
+        self.assertEqual(result[0]['provided_answer'], 'A')
+        self.assertEqual(result[0]['options']['A'], 'Nance appliance')
+
     def test_worker_retries_and_keeps_saved_progress(self):
         with main._paper_sync_lock:
             main._paper_sync_state.update(running=True, saved_batches=0, complete=False)
