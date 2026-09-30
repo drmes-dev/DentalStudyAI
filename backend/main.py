@@ -713,6 +713,91 @@ RULES
     return questions
 
 
+def canonicalize_past_paper_topics(
+    questions: List[Dict[str, Any]],
+    subject: str,
+) -> List[Dict[str, Any]]:
+    raw_topics = sorted({
+        normalize_text(item.get("topic", ""))
+        for item in questions
+        if normalize_text(item.get("topic", ""))
+    })
+
+    if not raw_topics:
+        return questions
+
+    existing_topics: List[str] = []
+
+    try:
+        catalog = past_paper_store.catalog()
+        existing_topics = [
+            item.get("name", "")
+            for item in catalog.get("topics", [])
+            if (
+                str(item.get("subject", "")).strip().lower()
+                == str(subject).strip().lower()
+                and item.get("name")
+            )
+        ][:80]
+    except Exception as exc:
+        print("Topic catalog lookup warning:", exc)
+
+    prompt = f"""
+You are normalizing topic labels for a BDS past-paper question bank.
+
+SUBJECT
+-------
+{subject}
+
+RAW TOPIC LABELS FROM THIS PAPER
+--------------------------------
+{json.dumps(raw_topics, ensure_ascii=False)}
+
+EXISTING CANONICAL LABELS ALREADY USED FOR THIS SUBJECT
+-------------------------------------------------------
+{json.dumps(existing_topics, ensure_ascii=False)}
+
+Return ONLY one JSON object mapping every raw topic label to one canonical
+topic label.
+
+RULES
+-----
+1. If an existing canonical label means the same thing, reuse it exactly.
+2. Otherwise create a concise standard BDS topic label, normally 2-5 words.
+3. Merge only genuinely equivalent labels; do not collapse distinct topics.
+4. Do not change question wording, answers, or subtopics.
+5. Return JSON only.
+"""
+
+    generated = generate_with_fallback(prompt)
+
+    if generated.get("provider") == "Error":
+        return questions
+
+    try:
+        mapping = _json_payload(
+            generated.get("response", ""),
+            "object",
+        )
+    except Exception as exc:
+        print("Topic normalization warning:", exc)
+        return questions
+
+    if not isinstance(mapping, dict):
+        return questions
+
+    for item in questions:
+        raw = normalize_text(item.get("topic", ""))
+        canonical = normalize_text(
+            mapping.get(raw, raw)
+        )[:160]
+
+        if canonical:
+            item["topic"] = canonical
+
+    return questions
+
+
 def cross_check_past_paper_question(
     question: Dict[str, Any],
 ) -> Dict[str, Any]:
@@ -1407,6 +1492,11 @@ async def ingest_past_paper(
         questions = parse_past_paper_questions(
             pages=extraction["pages"],
             subject=resolved_subject,
+        )
+
+        questions = canonicalize_past_paper_topics(
+            questions,
+            resolved_subject,
         )
 
         if not questions:
