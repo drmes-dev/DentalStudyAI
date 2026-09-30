@@ -39,7 +39,7 @@ jobs:
           import main
           assert main.app is not None
           routes = {getattr(route, "path", None) for route in main.app.routes}
-          required = {"/", "/health", "/beta/verify", "/chat", "/upload-pdf", "/transcribe", "/past-papers/ingest-pdf", "/past-papers/import-existing", "/past-papers/{paper_id}/verify", "/test/catalog", "/test/start", "/test/grade", "/feedback"}
+          required = {"/", "/health", "/beta/verify", "/chat", "/upload-pdf", "/transcribe", "/past-papers/ingest-pdf", "/past-papers/rag-documents", "/past-papers/import-existing", "/past-papers/import-rag/{doc_id}", "/past-papers/{paper_id}/verify", "/test/catalog", "/test/start", "/test/grade", "/feedback"}
           missing = required - routes
           if missing:
               raise SystemExit(f"Missing routes: {sorted(missing)}")

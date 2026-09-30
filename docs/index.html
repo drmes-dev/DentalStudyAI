@@ -3481,6 +3481,35 @@ a.source-card:hover {
                     >
                         <h3>Add & cross-check a past paper</h3>
 
+                        <div class="test-field" style="margin-bottom:12px;">
+                            <label for="existingRagPaperSelect">
+                                Already in your RAG library
+                            </label>
+                            <select id="existingRagPaperSelect">
+                                <option value="">
+                                    Loading RAG documents…
+                                </option>
+                            </select>
+                        </div>
+
+                        <div class="test-actions" style="margin-top:0;margin-bottom:14px;">
+                            <button
+                                class="test-primary"
+                                id="importSelectedRagPaperButton"
+                                type="button"
+                            >
+                                Use selected RAG paper
+                            </button>
+
+                            <button
+                                class="test-secondary"
+                                id="reloadRagPaperListButton"
+                                type="button"
+                            >
+                                Reload RAG list
+                            </button>
+                        </div>
+
                         <div class="test-form-grid">
                             <div class="test-field">
                                 <label for="pastPaperFile">Past-paper PDF</label>
@@ -3779,7 +3808,7 @@ a.source-card:hover {
    DENTORA CONFIGURATION
 ========================================================= */
 
-window.DENTORA_BUILD = "2026-09-30-test-mode-legacy-import-v2";
+window.DENTORA_BUILD = "2026-09-30-direct-rag-paper-import-v3";
 
 const API_BASE =
     "https://dentalstudyai.onrender.com";
@@ -3807,6 +3836,12 @@ const PAST_PAPER_INGEST_API =
 
 const PAST_PAPER_IMPORT_API =
     API_BASE + "/past-papers/import-existing";
+
+const PAST_PAPER_RAG_DOCUMENTS_API =
+    API_BASE + "/past-papers/rag-documents";
+
+const PAST_PAPER_IMPORT_RAG_API =
+    API_BASE + "/past-papers/import-rag";
 
 const TEST_CATALOG_API =
     API_BASE + "/test/catalog";
@@ -3988,6 +4023,12 @@ const testResults =
     document.getElementById("testResults");
 const ownerPaperPanel =
     document.getElementById("ownerPaperPanel");
+const existingRagPaperSelect =
+    document.getElementById("existingRagPaperSelect");
+const importSelectedRagPaperButton =
+    document.getElementById("importSelectedRagPaperButton");
+const reloadRagPaperListButton =
+    document.getElementById("reloadRagPaperListButton");
 const testSubject =
     document.getElementById("testSubject");
 const testTopic =
@@ -4849,6 +4890,10 @@ function renderOwnerPaperPanel() {
         "show",
         Boolean(ownerAccessCode)
     );
+
+    if (ownerAccessCode) {
+        loadExistingRagPaperDocuments();
+    }
 }
 
 
@@ -5121,6 +5166,234 @@ async function loadTestCatalog(
             "Question bank could not be loaded.",
             "error"
         );
+    }
+}
+
+
+/* =========================================================
+   EXISTING RAG PAPER PICKER
+========================================================= */
+
+async function loadExistingRagPaperDocuments() {
+    if (!ownerAccessCode) {
+        return;
+    }
+
+    existingRagPaperSelect.innerHTML =
+        '<option value="">Loading RAG documents…</option>';
+
+    try {
+        const response =
+            await fetch(
+                PAST_PAPER_RAG_DOCUMENTS_API,
+                {
+                    headers:
+                        betaHeaders(false),
+                    cache:
+                        "no-store"
+                }
+            );
+
+        if (!response.ok) {
+            throw new Error(
+                "Dentora could not read the existing RAG document list."
+            );
+        }
+
+        const data =
+            await response.json();
+
+        const documents =
+            Array.isArray(data.documents)
+                ? data.documents
+                : [];
+
+        existingRagPaperSelect.innerHTML =
+            '<option value="">Select an indexed PDF…</option>';
+
+        documents.forEach(
+            item => {
+                const option =
+                    window.document.createElement(
+                        "option"
+                    );
+
+                option.value =
+                    item.doc_id;
+
+                option.dataset.category =
+                    item.category || "";
+
+                option.dataset.title =
+                    item.title || "";
+
+                option.textContent =
+                    (
+                        item.already_imported
+                            ? "✓ "
+                            : (
+                                item.suggested_past_paper
+                                    ? "★ "
+                                    : ""
+                            )
+                    ) +
+                    (item.title || item.filename || item.doc_id) +
+                    " [" +
+                    (item.category || "Other") +
+                    "]" +
+                    (
+                        item.pages
+                            ? " · " + item.pages + "p"
+                            : ""
+                    );
+
+                existingRagPaperSelect.appendChild(
+                    option
+                );
+            }
+        );
+
+        if (documents.length === 0) {
+            existingRagPaperSelect.innerHTML =
+                '<option value="">No RAG documents found</option>';
+        }
+
+    } catch (error) {
+        console.error(
+            "RAG document list error:",
+            error
+        );
+
+        existingRagPaperSelect.innerHTML =
+            '<option value="">Could not load RAG documents</option>';
+
+        showToast(
+            error.message ||
+            "Could not load existing RAG documents.",
+            "error"
+        );
+    }
+}
+
+
+async function importSelectedRagPaper() {
+    const docId =
+        existingRagPaperSelect.value;
+
+    if (!ownerAccessCode) {
+        showToast(
+            "Owner access is required.",
+            "error"
+        );
+        return;
+    }
+
+    if (!docId) {
+        showToast(
+            "Choose the Operative or Orthodontic paper from your RAG library first.",
+            "error"
+        );
+        return;
+    }
+
+    importSelectedRagPaperButton.disabled =
+        true;
+
+    pastPaperProgress.textContent =
+        "Using the selected RAG document — reconstructing its pages and structuring questions…";
+
+    try {
+        const response =
+            await fetch(
+                PAST_PAPER_IMPORT_RAG_API +
+                "/" +
+                encodeURIComponent(docId),
+                {
+                    method: "POST",
+                    headers:
+                        betaHeaders(true),
+                    body:
+                        JSON.stringify({
+                            subject:
+                                pastPaperSubject.value.trim() ||
+                                null,
+                            year:
+                                pastPaperYear.value.trim() ||
+                                null,
+                            title:
+                                pastPaperTitle.value.trim() ||
+                                null
+                        })
+                }
+            );
+
+        if (!response.ok) {
+            let detail =
+                "The selected RAG paper could not be imported.";
+
+            try {
+                const errorData =
+                    await response.json();
+
+                if (
+                    errorData &&
+                    typeof errorData.detail === "string"
+                ) {
+                    detail =
+                        errorData.detail;
+                }
+            } catch (_) {}
+
+            throw new Error(detail);
+        }
+
+        const data =
+            await response.json();
+
+        pastPaperProgress.textContent =
+            "Structured " +
+            data.question_count +
+            " questions from " +
+            (data.title || "the selected RAG paper") +
+            ". Cross-checking MCQs against your indexed Books…";
+
+        await crossCheckImportedPaper(
+            data,
+            data.title || "selected RAG paper"
+        );
+
+        pastPaperProgress.textContent =
+            "Done — " +
+            data.question_count +
+            " structured questions were added from " +
+            (data.title || "the selected RAG paper") +
+            ".";
+
+        showToast(
+            "RAG past paper added to Test Mode."
+        );
+
+        await loadTestCatalog(false);
+        await loadExistingRagPaperDocuments();
+
+    } catch (error) {
+        console.error(
+            "Selected RAG paper import error:",
+            error
+        );
+
+        pastPaperProgress.textContent =
+            error.message ||
+            "Selected RAG paper import failed.";
+
+        showToast(
+            pastPaperProgress.textContent,
+            "error"
+        );
+
+    } finally {
+        importSelectedRagPaperButton.disabled =
+            false;
     }
 }
 
@@ -8118,6 +8391,18 @@ importExistingPastPapersButton.addEventListener(
             false
         );
     }
+);
+
+
+importSelectedRagPaperButton.addEventListener(
+    "click",
+    importSelectedRagPaper
+);
+
+
+reloadRagPaperListButton.addEventListener(
+    "click",
+    loadExistingRagPaperDocuments
 );
 
 

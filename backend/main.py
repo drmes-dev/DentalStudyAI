@@ -143,6 +143,12 @@ class TestGradeRequest(BaseModel):
     responses: List[Dict[str, str]] = Field(default_factory=list)
 
 
+class ExistingPaperImportRequest(BaseModel):
+    subject: Optional[str] = Field(default=None, max_length=160)
+    year: Optional[str] = Field(default=None, max_length=40)
+    title: Optional[str] = Field(default=None, max_length=300)
+
+
 # =========================================================
 # TEMPORARY PDF SESSION MEMORY
 # =========================================================
@@ -1132,7 +1138,7 @@ STRICT RULES
 def root():
     return {
         "message": "Dentora backend is running.",
-        "version": "2.3.1-legacy-paper-import",
+        "version": "2.3.2-direct-rag-paper-import",
     }
 
 
@@ -1717,6 +1723,211 @@ async def ingest_past_paper(
         raise HTTPException(
             status_code=500,
             detail="Dentora could not structure this past paper.",
+        ) from exc
+
+
+@app.get("/past-papers/rag-documents")
+def list_existing_rag_documents(
+    request: Request,
+    x_dentora_beta_key: Optional[str] = Header(
+        default=None,
+        alias="X-Dentora-Beta-Key",
+    ),
+):
+    """Show the owner the documents already stored in the RAG library."""
+    require_owner_access(x_dentora_beta_key)
+    enforce_rate_limit(
+        request,
+        "past-paper-rag-documents",
+        30,
+        10 * 60,
+    )
+
+    imported_ids = {
+        str(paper.get("paper_id", "")).strip()
+        for paper in past_paper_store.list_papers()
+    }
+
+    documents = []
+
+    for item in rag_store.list_documents():
+        doc_id = str(item.get("doc_id", "")).strip()
+        if not doc_id:
+            continue
+
+        filename = normalize_text(item.get("filename", ""))
+        title = normalize_text(item.get("title", ""))
+        category = normalize_text(item.get("category", "Other"))
+
+        cue_text = f"{filename} {title} {category}".lower()
+        suggested = (
+            category.lower() in {"past papers", "past paper"}
+            or bool(
+                re.search(
+                    r"(past\s*paper|question\s*paper|annual\s*exam|"
+                    r"professional\s*exam|supply\s*exam|orthodont|"
+                    r"operative)",
+                    cue_text,
+                    re.IGNORECASE,
+                )
+            )
+        )
+
+        documents.append({
+            "doc_id": doc_id,
+            "filename": filename,
+            "title": title or filename,
+            "category": category,
+            "pages": int(item.get("pages", 0) or 0),
+            "chunks": int(item.get("chunks", 0) or 0),
+            "already_imported": doc_id in imported_ids,
+            "suggested_past_paper": suggested,
+        })
+
+    documents.sort(
+        key=lambda item: (
+            not item["suggested_past_paper"],
+            item["already_imported"],
+            item["category"].lower(),
+            item["title"].lower(),
+        )
+    )
+
+    return {
+        "count": len(documents),
+        "documents": documents,
+    }
+
+
+@app.post("/past-papers/import-rag/{doc_id}")
+def import_selected_rag_past_paper(
+    doc_id: str,
+    payload: ExistingPaperImportRequest,
+    request: Request,
+    x_dentora_beta_key: Optional[str] = Header(
+        default=None,
+        alias="X-Dentora-Beta-Key",
+    ),
+):
+    """Import one exact already-indexed RAG document into Test Mode."""
+    require_owner_access(x_dentora_beta_key)
+    enforce_rate_limit(
+        request,
+        "past-paper-import-rag",
+        20,
+        60 * 60,
+    )
+
+    documents = rag_store.list_documents()
+    document = next(
+        (
+            item
+            for item in documents
+            if str(item.get("doc_id", "")).strip() == doc_id
+        ),
+        None,
+    )
+
+    if document is None:
+        raise HTTPException(
+            status_code=404,
+            detail="That RAG document was not found.",
+        )
+
+    pages = rag_store.document_pages(doc_id)
+
+    if not pages:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "Dentora found the RAG document but could not reconstruct "
+                "readable page text from its stored chunks."
+            ),
+        )
+
+    inferred = infer_existing_past_paper_metadata(
+        document,
+        pages,
+    )
+
+    subject = normalize_text(payload.subject or "")[:160]
+    if not subject:
+        subject = normalize_text(
+            inferred.get("subject", "")
+        )[:160]
+    if not subject:
+        subject = _fallback_past_paper_subject(
+            document.get("filename", ""),
+            document.get("title", ""),
+        )
+
+    year = normalize_text(payload.year or "")[:40]
+    if not year:
+        year = normalize_text(
+            inferred.get("year", "")
+        )[:40]
+    year = year or "Unknown"
+
+    title = normalize_text(payload.title or "")[:300]
+    if not title:
+        title = normalize_text(
+            inferred.get("title", "")
+        )[:300]
+    if not title:
+        title = (
+            normalize_text(document.get("title", ""))
+            or normalize_text(document.get("filename", ""))
+            or "Past Paper"
+        )[:300]
+
+    try:
+        questions = parse_past_paper_questions(
+            pages=pages,
+            subject=subject,
+        )
+
+        questions = canonicalize_past_paper_topics(
+            questions,
+            subject,
+        )
+
+        if not questions:
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    "The selected RAG document was found, but Dentora could "
+                    "not extract clear examination questions from its stored text."
+                ),
+            )
+
+        result = past_paper_store.index_paper(
+            paper_id=doc_id,
+            title=title,
+            subject=subject,
+            year=year,
+            filename=document.get("filename", ""),
+            questions=questions,
+            replace_existing=True,
+        )
+
+        result.update({
+            "imported": True,
+            "source": "selected_rag_document",
+            "original_category": document.get("category", ""),
+        })
+
+        return result
+
+    except HTTPException:
+        raise
+    except Exception as exc:
+        print("Selected RAG paper import error:", doc_id, exc)
+        raise HTTPException(
+            status_code=500,
+            detail=(
+                "Dentora found the document, but structuring it into "
+                "Test Mode failed."
+            ),
         ) from exc
 
 
