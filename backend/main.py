@@ -13,6 +13,7 @@ import os
 import re
 import time
 import hmac
+import json
 from threading import Lock
 
 import pytesseract
@@ -30,6 +31,7 @@ from rag import (
     rag_store,
     safe_category,
 )
+from test_engine import past_paper_store
 
 
 # =========================================================
@@ -126,6 +128,19 @@ class FeedbackRequest(BaseModel):
     answer: str = Field(default="", max_length=12000)
     mode: str = Field(default="", max_length=40)
     source_summary: str = Field(default="", max_length=4000)
+
+
+class TestStartRequest(BaseModel):
+    count: int = Field(default=20, ge=1, le=100)
+    subject: Optional[str] = Field(default=None, max_length=160)
+    year: Optional[str] = Field(default=None, max_length=40)
+    topic: Optional[str] = Field(default=None, max_length=160)
+    repeated_only: bool = False
+    weak_topics: Optional[List[str]] = None
+
+
+class TestGradeRequest(BaseModel):
+    responses: List[Dict[str, str]] = Field(default_factory=list)
 
 
 # =========================================================
@@ -388,6 +403,26 @@ def require_beta_access(supplied_key: Optional[str]) -> str:
     return role
 
 
+def require_owner_access(supplied_key: Optional[str]):
+    if not DENTORA_OWNER_ACCESS_CODE:
+        raise HTTPException(
+            status_code=503,
+            detail="DENTORA_OWNER_ACCESS_CODE is not configured.",
+        )
+
+    if (
+        not supplied_key
+        or not hmac.compare_digest(
+            supplied_key,
+            DENTORA_OWNER_ACCESS_CODE,
+        )
+    ):
+        raise HTTPException(
+            status_code=403,
+            detail="Owner access is required for this action.",
+        )
+
+
 # =========================================================
 # AI GENERATION
 # =========================================================
@@ -530,6 +565,295 @@ Return the corrected answer only.
     return generate_with_fallback(prompt)
 
 
+def _json_payload(text: str, expected: str = "array"):
+    value = str(text or "").strip()
+    value = re.sub(
+        r"^\s*```(?:json)?\s*",
+        "",
+        value,
+        flags=re.IGNORECASE,
+    )
+    value = re.sub(r"\s*```\s*$", "", value)
+
+    if expected == "object":
+        start = value.find("{")
+        end = value.rfind("}")
+    else:
+        start = value.find("[")
+        end = value.rfind("]")
+
+    if start < 0 or end <= start:
+        raise ValueError("Model did not return valid JSON.")
+
+    return json.loads(value[start:end + 1])
+
+
+def _past_paper_batches(
+    pages: List[Dict[str, Any]],
+    max_chars: int = 14000,
+) -> List[str]:
+    batches = []
+    current = []
+    length = 0
+
+    for page in pages:
+        text = normalize_text(page.get("text", ""))
+        if not text:
+            continue
+
+        block = (
+            f"--- PDF PAGE {int(page.get('page', 0))} ---\n"
+            f"{text}"
+        )
+
+        if current and length + len(block) > max_chars:
+            batches.append("\n\n".join(current))
+            current = []
+            length = 0
+
+        current.append(block)
+        length += len(block)
+
+    if current:
+        batches.append("\n\n".join(current))
+
+    return batches
+
+
+def parse_past_paper_questions(
+    *,
+    pages: List[Dict[str, Any]],
+    subject: str,
+) -> List[Dict[str, Any]]:
+    questions: List[Dict[str, Any]] = []
+    seen = set()
+
+    for batch in _past_paper_batches(pages):
+        prompt = f"""
+You are structuring a BDS past examination paper into a question bank.
+
+SUBJECT
+-------
+{subject}
+
+SOURCE PAPER TEXT
+-----------------
+{batch}
+
+OUTPUT
+------
+Return ONLY a JSON array. Each item must have exactly these fields:
+- question_number
+- stem
+- options
+- question_type
+- topic
+- subtopic
+- page
+- marks
+- provided_answer
+
+RULES
+-----
+1. Preserve the actual question wording from the paper. Do not rewrite it.
+2. Preserve MCQ option wording. Use an object such as
+   {{"A":"...","B":"...","C":"...","D":"..."}}.
+3. If options are not present, use an empty object.
+4. "provided_answer" must be blank unless an answer/key is explicitly visible
+   in the supplied paper text. Never invent an answer.
+5. "page" is the PDF page number indicated by the nearest PDF PAGE marker.
+6. Classify topic and subtopic concisely for BDS revision.
+7. question_type should be one of:
+   mcq, true_false, emq, short_answer, essay, osce, other.
+8. Do not convert headings, instructions, roll numbers, marks tables, or
+   answer-key labels into questions.
+9. If a question is incomplete in this excerpt, include it only when its stem
+   and answer choices can be reconstructed directly from the supplied text.
+10. Return JSON only. No commentary and no Markdown.
+"""
+        generated = generate_with_fallback(prompt)
+
+        if generated.get("provider") == "Error":
+            raise RuntimeError(
+                "Dentora could not structure the past paper because no AI "
+                "provider was available."
+            )
+
+        parsed = _json_payload(
+            generated.get("response", ""),
+            "array",
+        )
+
+        if not isinstance(parsed, list):
+            raise ValueError("Past-paper parser returned a non-list payload.")
+
+        for raw in parsed:
+            if not isinstance(raw, dict):
+                continue
+
+            stem = normalize_text(raw.get("stem", ""))
+            if len(stem) < 8:
+                continue
+
+            key = re.sub(
+                r"[^a-z0-9]+",
+                " ",
+                stem.lower(),
+            ).strip()
+
+            if key in seen:
+                continue
+
+            seen.add(key)
+            questions.append(raw)
+
+            if len(questions) >= 300:
+                return questions
+
+    return questions
+
+
+def cross_check_past_paper_question(
+    question: Dict[str, Any],
+) -> Dict[str, Any]:
+    options = question.get("options") or {}
+
+    if not isinstance(options, dict) or len(options) < 2:
+        return {
+            "status": "not_auto_gradable",
+            "verified_answer": "",
+            "confidence": "",
+            "rationale": (
+                "This item does not contain enough structured answer options "
+                "for automatic marking."
+            ),
+            "sources": [],
+        }
+
+    option_text = "\n".join(
+        f"{key}. {value}"
+        for key, value in options.items()
+    )
+
+    query = (
+        f"{question.get('stem', '')}\n"
+        f"{option_text}"
+    )
+
+    sources = rag_store.search(
+        query,
+        top_k=4,
+        exclude_assessment=True,
+    )
+
+    if not sources:
+        return {
+            "status": "insufficient",
+            "verified_answer": "",
+            "confidence": "low",
+            "rationale": (
+                "No explanatory textbook evidence was retrieved strongly "
+                "enough to verify this answer."
+            ),
+            "sources": [],
+        }
+
+    context = build_context(sources)
+    provided = str(
+        question.get("provided_answer", "")
+        or ""
+    ).strip().upper()
+
+    prompt = f"""
+You are independently checking a BDS past-paper MCQ against retrieved
+explanatory textbook evidence.
+
+QUESTION
+--------
+{question.get('stem', '')}
+
+OPTIONS
+-------
+{option_text}
+
+PAST-PAPER KEY IF PRESENT
+-------------------------
+{provided or "No answer key was visible in the paper."}
+
+RETRIEVED TEXTBOOK EVIDENCE
+---------------------------
+{context}
+
+Return ONLY one JSON object:
+{{
+  "verified_answer": "A/B/C/D/etc or empty string",
+  "confidence": "high/moderate/low",
+  "rationale": "brief evidence-based explanation"
+}}
+
+STRICT RULES
+------------
+1. Determine the answer from explanatory textbook evidence, not from the
+   past-paper key.
+2. Review questions, MCQ distractors, and answer options inside a textbook
+   excerpt are not evidence unless explanatory prose establishes them.
+3. If the retrieved evidence does not clearly support one option, return an
+   empty verified_answer and low confidence.
+4. Never invent a page, source, option, or answer.
+5. Keep the rationale concise and do not claim more than the excerpts support.
+"""
+    generated = generate_with_fallback(prompt)
+
+    if generated.get("provider") == "Error":
+        raise RuntimeError("No AI provider was available for cross-checking.")
+
+    parsed = _json_payload(
+        generated.get("response", ""),
+        "object",
+    )
+
+    verified = str(
+        parsed.get("verified_answer", "")
+        or ""
+    ).strip().upper()
+
+    valid_labels = {
+        str(key).strip().upper()
+        for key in options.keys()
+    }
+
+    if verified not in valid_labels:
+        verified = ""
+
+    if not verified:
+        status = "insufficient"
+    elif provided and provided in valid_labels and provided != verified:
+        status = "conflict"
+    else:
+        status = "verified"
+
+    return {
+        "status": status,
+        "verified_answer": verified,
+        "confidence": str(
+            parsed.get("confidence", "low")
+            or "low"
+        ).strip().lower(),
+        "rationale": normalize_text(
+            parsed.get("rationale", "")
+        )[:1800],
+        "sources": [
+            {
+                "filename": source.get("filename", ""),
+                "title": source.get("title", ""),
+                "page": int(source.get("page", 0) or 0),
+                "category": source.get("category", ""),
+            }
+            for source in sources
+        ],
+    }
+
+
 # =========================================================
 # HEALTH
 # =========================================================
@@ -538,7 +862,7 @@ Return the corrected answer only.
 def root():
     return {
         "message": "Dentora backend is running.",
-        "version": "2.2.0-voice-beta",
+        "version": "2.3.0-test-engine-beta",
     }
 
 
@@ -549,6 +873,7 @@ def health():
         "service": "Dentora API",
         "rag_configured": rag_store.configured,
         "voice_configured": bool(os.getenv("GROQ_API_KEY")),
+        "test_engine_configured": past_paper_store.configured,
         "beta_access_required": True,
         "beta_access_configured": bool(DENTORA_BETA_ACCESS_CODE),
         "owner_access_configured": bool(DENTORA_OWNER_ACCESS_CODE),
@@ -990,6 +1315,282 @@ async def transcribe_voice(
                 "Please type your question or try again."
             ),
         ) from exc
+
+
+# =========================================================
+# PAST PAPER ENGINE / TEST MODE
+# =========================================================
+
+@app.post("/past-papers/ingest-pdf")
+async def ingest_past_paper(
+    request: Request,
+    file: UploadFile = File(...),
+    subject: str = Form(""),
+    year: str = Form(""),
+    title: str = Form(""),
+    x_dentora_beta_key: Optional[str] = Header(
+        default=None,
+        alias="X-Dentora-Beta-Key",
+    ),
+):
+    require_owner_access(x_dentora_beta_key)
+    enforce_rate_limit(
+        request,
+        "past-paper-ingest",
+        5,
+        60 * 60,
+    )
+
+    if not past_paper_store.configured:
+        raise HTTPException(
+            status_code=503,
+            detail="Persistent question-bank storage is not configured.",
+        )
+
+    filename = file.filename or "past-paper.pdf"
+
+    if not filename.lower().endswith(".pdf"):
+        raise HTTPException(
+            status_code=400,
+            detail="Only PDF past papers are supported.",
+        )
+
+    contents = await file.read(
+        MAX_TEMP_PDF_MB * 1024 * 1024 + 1
+    )
+
+    if len(contents) > MAX_TEMP_PDF_MB * 1024 * 1024:
+        raise HTTPException(
+            status_code=413,
+            detail=(
+                f"Past-paper ingestion accepts PDFs up to "
+                f"{MAX_TEMP_PDF_MB} MB."
+            ),
+        )
+
+    try:
+        extraction = extract_pdf_pages(
+            contents,
+            allow_ocr=True,
+            web_mode=True,
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=400,
+            detail="Dentora could not read this past-paper PDF.",
+        ) from exc
+
+    if extraction["page_count"] > 150:
+        raise HTTPException(
+            status_code=413,
+            detail=(
+                "Past-paper structuring currently accepts up to 150 pages "
+                "per PDF. Split very large compilations into smaller files."
+            ),
+        )
+
+    resolved_subject = normalize_text(subject)[:160]
+    resolved_year = normalize_text(year)[:40]
+    resolved_title = (
+        normalize_text(title)
+        or os.path.splitext(filename)[0]
+    )[:300]
+
+    if not resolved_subject:
+        raise HTTPException(
+            status_code=400,
+            detail="Enter the subject before structuring the paper.",
+        )
+
+    try:
+        questions = parse_past_paper_questions(
+            pages=extraction["pages"],
+            subject=resolved_subject,
+        )
+
+        if not questions:
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    "No clear examination questions could be structured "
+                    "from this PDF."
+                ),
+            )
+
+        paper_id = document_id(contents)
+
+        result = past_paper_store.index_paper(
+            paper_id=paper_id,
+            title=resolved_title,
+            subject=resolved_subject,
+            year=resolved_year or "Unknown",
+            filename=filename,
+            questions=questions,
+            replace_existing=True,
+        )
+
+        result["ocr_used"] = extraction["ocr_used"]
+        result["unresolved_scanned_pages"] = (
+            extraction["unresolved_scanned_pages"]
+        )
+        return result
+
+    except HTTPException:
+        raise
+    except Exception as exc:
+        print("Past-paper ingestion error:", exc)
+        raise HTTPException(
+            status_code=500,
+            detail="Dentora could not structure this past paper.",
+        ) from exc
+
+
+@app.post("/past-papers/{paper_id}/verify")
+def verify_past_paper(
+    paper_id: str,
+    request: Request,
+    batch_size: int = 4,
+    x_dentora_beta_key: Optional[str] = Header(
+        default=None,
+        alias="X-Dentora-Beta-Key",
+    ),
+):
+    require_owner_access(x_dentora_beta_key)
+    enforce_rate_limit(
+        request,
+        "past-paper-verify",
+        60,
+        60 * 60,
+    )
+
+    batch_size = max(1, min(int(batch_size), 6))
+    pending = past_paper_store.pending_questions(
+        paper_id,
+        limit=batch_size,
+    )
+
+    processed = 0
+
+    for question in pending:
+        try:
+            result = cross_check_past_paper_question(
+                question
+            )
+
+            past_paper_store.update_verification(
+                question["id"],
+                status=result["status"],
+                verified_answer=result["verified_answer"],
+                confidence=result["confidence"],
+                rationale=result["rationale"],
+                sources=result["sources"],
+            )
+            processed += 1
+
+        except Exception as exc:
+            print(
+                "Past-paper verification error:",
+                question.get("id"),
+                exc,
+            )
+
+    counts = past_paper_store.refresh_manifest_counts(
+        paper_id
+    )
+
+    return {
+        "success": True,
+        "paper_id": paper_id,
+        "processed": processed,
+        **counts,
+        "complete": counts["pending_count"] == 0,
+    }
+
+
+@app.get("/test/catalog")
+def test_catalog(
+    request: Request,
+    x_dentora_beta_key: Optional[str] = Header(
+        default=None,
+        alias="X-Dentora-Beta-Key",
+    ),
+):
+    require_beta_access(x_dentora_beta_key)
+    enforce_rate_limit(
+        request,
+        "test-catalog",
+        60,
+        10 * 60,
+    )
+
+    if not past_paper_store.configured:
+        return {
+            "configured": False,
+            "paper_count": 0,
+            "question_count": 0,
+            "eligible_test_questions": 0,
+            "subjects": [],
+            "years": [],
+            "topics": [],
+            "papers": [],
+        }
+
+    return past_paper_store.catalog()
+
+
+@app.post("/test/start")
+def start_test(
+    config: TestStartRequest,
+    request: Request,
+    x_dentora_beta_key: Optional[str] = Header(
+        default=None,
+        alias="X-Dentora-Beta-Key",
+    ),
+):
+    require_beta_access(x_dentora_beta_key)
+    enforce_rate_limit(
+        request,
+        "test-start",
+        30,
+        10 * 60,
+    )
+
+    questions = past_paper_store.sample_test(
+        count=config.count,
+        subject=config.subject,
+        year=config.year,
+        topic=config.topic,
+        weak_topics=config.weak_topics,
+        repeated_only=config.repeated_only,
+    )
+
+    return {
+        "count": len(questions),
+        "questions": questions,
+        "answers_hidden": True,
+    }
+
+
+@app.post("/test/grade")
+def grade_test(
+    payload: TestGradeRequest,
+    request: Request,
+    x_dentora_beta_key: Optional[str] = Header(
+        default=None,
+        alias="X-Dentora-Beta-Key",
+    ),
+):
+    require_beta_access(x_dentora_beta_key)
+    enforce_rate_limit(
+        request,
+        "test-grade",
+        30,
+        10 * 60,
+    )
+
+    return past_paper_store.grade(
+        payload.responses
+    )
 
 
 # =========================================================
