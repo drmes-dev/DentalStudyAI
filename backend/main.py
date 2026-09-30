@@ -1432,7 +1432,7 @@ OCR is too damaged or the item is genuinely ambiguous, return an empty answer.
 def root():
     return {
         "message": "Dentora backend is running.",
-        "version": "2.4.4-reduced-pinecone-egress",
+        "version": "2.5.0-d1-question-bank",
     }
 
 
@@ -1444,6 +1444,7 @@ def health():
         "rag_configured": rag_store.configured,
         "voice_configured": bool(os.getenv("GROQ_API_KEY")),
         "test_engine_configured": past_paper_store.configured,
+        "question_bank_storage": past_paper_store.storage_name,
         "beta_access_required": True,
         "beta_access_configured": bool(DENTORA_BETA_ACCESS_CODE),
         "owner_access_configured": bool(DENTORA_OWNER_ACCESS_CODE),

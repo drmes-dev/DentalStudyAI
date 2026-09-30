@@ -60,6 +60,7 @@ def _question_text(question: Dict[str, Any]) -> str:
 
 
 class PastPaperStore:
+    storage_name = "pinecone"
     def __init__(self):
         self._read_cache = ReadCache(max_bytes=16 * 1024 * 1024)
 
@@ -73,6 +74,9 @@ class PastPaperStore:
             raise RuntimeError("Persistent Pinecone storage is not configured.")
         return index
 
+    def _list_ids(self, namespace, prefix):
+        return rag_store._list_ids(namespace, prefix)
+
     def _manifest_id(self, paper_id: str) -> str:
         return f"ppmeta#{paper_id}"
 
@@ -82,7 +86,7 @@ class PastPaperStore:
     @invalidates_reads
     def _delete_prefix(self, namespace: str, prefix: str):
         index = self._index()
-        ids = rag_store._list_ids(namespace, prefix)
+        ids = self._list_ids(namespace, prefix)
         for start in range(0, len(ids), 1000):
             batch = ids[start:start + 1000]
             if batch:
@@ -234,7 +238,7 @@ class PastPaperStore:
         question_count = len(records)
         if not replace_existing:
             question_count = len(set(
-                rag_store._list_ids(TEST_NS, f"ppq#{paper_id}#")
+                self._list_ids(TEST_NS, f"ppq#{paper_id}#")
             ) | {record["id"] for record in records})
 
         index.upsert(
@@ -332,7 +336,7 @@ class PastPaperStore:
     ) -> List[Dict[str, Any]]:
         index = self._index()
         prefix = f"ppq#{paper_id}#" if paper_id else "ppq#"
-        ids = rag_store._list_ids(TEST_NS, prefix)
+        ids = self._list_ids(TEST_NS, prefix)
         result = []
 
         for start in range(0, len(ids), 100):
@@ -566,7 +570,7 @@ class PastPaperStore:
     @cached_read(ttl=30)
     def list_papers(self) -> List[Dict[str, Any]]:
         index = self._index()
-        ids = rag_store._list_ids(
+        ids = self._list_ids(
             TEST_MANIFEST_NS,
             "ppmeta#",
         )
@@ -895,4 +899,40 @@ class PastPaperStore:
         }
 
 
-past_paper_store = PastPaperStore()
+class D1PastPaperStore(PastPaperStore):
+    storage_name = "d1"
+
+    def __init__(self):
+        super().__init__()
+        self._d1_index = None
+
+    @property
+    def configured(self):
+        from d1_bank import d1_configured
+        return d1_configured()
+
+    def _index(self):
+        from d1_bank import D1BankIndex
+        # All store reads/writes that enter here use the same cache lock.
+        with self._read_cache.lock:
+            if self._d1_index is None:
+                self._d1_index = D1BankIndex()
+            self._d1_index.ensure_ready(rag_store, [
+                (TEST_NS, "ppq#"), (TEST_MANIFEST_NS, "ppmeta#"),
+            ])
+            return self._d1_index
+
+    def _list_ids(self, namespace, prefix):
+        return self._index().list_ids(namespace, prefix)
+
+
+def create_past_paper_store():
+    storage = os.getenv("QUESTION_BANK_STORAGE", "pinecone").strip().lower()
+    if storage == "d1":
+        return D1PastPaperStore()
+    if storage != "pinecone":
+        raise RuntimeError("QUESTION_BANK_STORAGE must be pinecone or d1.")
+    return PastPaperStore()
+
+
+past_paper_store = create_past_paper_store()
