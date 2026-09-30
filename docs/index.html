@@ -3353,6 +3353,30 @@ a.source-card:hover {
                                     id="readinessCoverage"
                                 >—</div>
                             </div>
+
+                            <div class="readiness-card">
+                                <div class="readiness-label">High-yield mastery</div>
+                                <div
+                                    class="readiness-value"
+                                    id="readinessHighYield"
+                                >—</div>
+                            </div>
+
+                            <div class="readiness-card">
+                                <div class="readiness-label">Consistency</div>
+                                <div
+                                    class="readiness-value"
+                                    id="readinessConsistency"
+                                >—</div>
+                            </div>
+
+                            <div class="readiness-card">
+                                <div class="readiness-label">Avg time / question</div>
+                                <div
+                                    class="readiness-value"
+                                    id="readinessTime"
+                                >—</div>
+                            </div>
                         </div>
                     </div>
 
@@ -3987,6 +4011,12 @@ const readinessAccuracy =
     document.getElementById("readinessAccuracy");
 const readinessCoverage =
     document.getElementById("readinessCoverage");
+const readinessHighYield =
+    document.getElementById("readinessHighYield");
+const readinessConsistency =
+    document.getElementById("readinessConsistency");
+const readinessTime =
+    document.getElementById("readinessTime");
 const bankPaperCount =
     document.getElementById("bankPaperCount");
 const bankQuestionCount =
@@ -4741,6 +4771,15 @@ function renderReadinessDashboard() {
         readinessCoverage.textContent =
             "—";
 
+        readinessHighYield.textContent =
+            "—";
+
+        readinessConsistency.textContent =
+            "—";
+
+        readinessTime.textContent =
+            "—";
+
         readinessNote.textContent =
             "Complete a test to establish your baseline.";
 
@@ -4759,6 +4798,20 @@ function renderReadinessDashboard() {
         percentText(
             metrics.coverage
         );
+
+    readinessHighYield.textContent =
+        percentText(
+            metrics.highYield
+        );
+
+    readinessConsistency.textContent =
+        percentText(
+            metrics.consistency
+        );
+
+    readinessTime.textContent =
+        metrics.averageSeconds +
+        "s";
 
     const weak =
         weakTopicNames();
