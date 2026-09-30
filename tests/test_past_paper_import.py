@@ -159,6 +159,29 @@ class BackgroundImportTests(unittest.TestCase):
         self.assertEqual(result[0]['provided_answer'], 'A')
         self.assertEqual(result[0]['options']['A'], 'Nance appliance')
 
+    def test_flattened_ocr_fallback_saves_without_advancing_checkpoint(self):
+        unavailable = {
+            'provider': 'Error',
+            'response': 'Cloud AI temporarily unavailable',
+            'retry_after': 180,
+            'error_code': 'quota_reached',
+        }
+        pages = [{
+            'page': 2,
+            'text': '12. Which appliance is used for anchorage? A. Nance appliance B. Hawley retainer C. Bite plane D. Mouth guard'
+        }]
+        document = {'doc_id': 'scan-flat', 'filename': 'Ortho.pdf', 'title': 'Ortho PP'}
+        with patch.object(main.rag_store, 'document_pages', return_value=pages), \
+             patch.object(main, 'generate_with_fallback', return_value=unavailable), \
+             patch.object(main.past_paper_store, 'index_paper', return_value={'success': True, 'question_count': 1}) as save:
+            result = main.structure_existing_rag_paper(document, incremental=True)
+        self.assertTrue(result['deferred'])
+        self.assertEqual(result['processed_pages'], 0)
+        self.assertEqual(result['retry_after'], 180)
+        self.assertEqual(save.call_args.kwargs['import_progress']['processed_pages'], 0)
+        self.assertEqual(save.call_args.kwargs['questions'][0]['options']['A'], 'Nance appliance')
+        self.assertNotIn('_local_fallback', save.call_args.kwargs['questions'][0])
+
     def test_worker_retries_and_keeps_saved_progress(self):
         with main._paper_sync_lock:
             main._paper_sync_state.update(running=True, saved_batches=0, complete=False)
