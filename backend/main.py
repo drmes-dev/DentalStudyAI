@@ -21,6 +21,7 @@ from rag import (
     build_context,
     chunk_pages,
     document_id,
+    is_assessment_like,
     normalize_text,
     public_sources,
     rag_store,
@@ -537,6 +538,8 @@ def rag_delete_document(
 @app.post("/chat")
 def chat(request: ChatRequest):
     message = request.message.strip()
+    mode_key = request.mode.strip().lower()
+    exclude_assessment = mode_key not in {"mcq", "mcq mode", "quiz"}
 
     if not message:
         raise HTTPException(status_code=400, detail="Message cannot be empty.")
@@ -548,11 +551,15 @@ def chat(request: ChatRequest):
     session_pdf = session_pdfs.get(request.session_id)
 
     if session_pdf:
+        session_added = 0
         for item in find_relevant_session_chunks(
             message,
             session_pdf.get("chunks", []),
-            max_chunks=4,
+            max_chunks=12 if exclude_assessment else 4,
         ):
+            if exclude_assessment and is_assessment_like(item.get("text", "")):
+                continue
+
             retrieved_sources.append({
                 "score": 1.0,
                 "combined_score": 1.0,
@@ -564,7 +571,11 @@ def chat(request: ChatRequest):
                 "chunk_index": item.get("chunk_index", 0),
                 "text": item.get("text", ""),
                 "source_url": "",
+                "evidence_kind": "exposition",
             })
+            session_added += 1
+            if session_added >= 4:
+                break
 
     # Persistent library
     if request.use_library and rag_store.configured:
@@ -573,6 +584,7 @@ def chat(request: ChatRequest):
                 message,
                 categories=request.categories,
                 top_k=RAG_CONTEXT_CHUNKS,
+                exclude_assessment=exclude_assessment,
             )
 
             existing = {

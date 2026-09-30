@@ -123,6 +123,64 @@ def keyword_overlap(query: str, text: str, title: str = "") -> float:
     return hits / len(words)
 
 
+def is_assessment_like(text: str) -> bool:
+    """Detect chunks that are likely review questions/MCQ answer options.
+
+    This is intentionally conservative: normal explanatory prose should remain
+    eligible, while obvious question banks and distractor-heavy chunks are
+    kept out of evidence grounding in non-MCQ modes.
+    """
+    value = normalize_text(text)
+    if not value:
+        return False
+
+    lower = value.lower()
+    compact = re.sub(r"\s+", " ", lower)
+    score = 0
+
+    strong_cues = (
+        "review question",
+        "review questions",
+        "self-assessment",
+        "self assessment",
+        "multiple-choice",
+        "multiple choice",
+        "true or false",
+    )
+    if any(cue in compact for cue in strong_cues):
+        score += 5
+
+    if re.search(r"\ba[\.)]\s*true\b.{0,80}\bb[\.)]\s*false\b", compact):
+        score += 5
+
+    option_count = len(re.findall(r"(?:^|\s)[a-e][\.)]\s+", lower))
+    if option_count >= 3:
+        score += 3
+    elif option_count == 2:
+        score += 1
+
+    question_cues = (
+        "which of the following",
+        "all of the following",
+        "choose the best",
+        "choose the correct",
+        "select the best",
+        "select the correct",
+        "is correct except",
+        "is true except",
+        "is false except",
+    )
+    if any(cue in compact for cue in question_cues):
+        score += 3
+
+    if option_count >= 2 and re.match(r"^\s*\d{1,3}[\.)]\s+", value):
+        score += 2
+
+    if option_count >= 2 and value.count("?") >= 1:
+        score += 2
+
+    return score >= 4
+
 def _matches(result) -> List[Any]:
     if isinstance(result, dict):
         return list(result.get("matches", []) or [])
@@ -437,6 +495,7 @@ class RagStore:
         query: str,
         categories: Optional[List[str]] = None,
         top_k: int = RAG_CONTEXT_CHUNKS,
+        exclude_assessment: bool = False,
     ) -> List[Dict[str, Any]]:
         index = self.connect()
         if index is None:
@@ -446,7 +505,7 @@ class RagStore:
 
         kwargs: Dict[str, Any] = {
             "vector": vector,
-            "top_k": max(RAG_CANDIDATES, top_k),
+            "top_k": max(RAG_CANDIDATES, top_k * (4 if exclude_assessment else 1)),
             "include_metadata": True,
             "namespace": KNOWLEDGE_NS,
         }
@@ -468,10 +527,13 @@ class RagStore:
             semantic = _score(match)
             lexical = keyword_overlap(query, text, metadata.get("title", ""))
             combined = 0.86 * semantic + 0.14 * lexical
+            assessment_like = is_assessment_like(text)
 
             candidates.append({
                 "score": semantic,
                 "combined_score": combined,
+                "assessment_like": assessment_like,
+                "evidence_kind": "assessment" if assessment_like else "exposition",
                 "doc_id": metadata.get("doc_id", ""),
                 "filename": metadata.get("filename", "Unknown source"),
                 "title": metadata.get("title", ""),
@@ -490,6 +552,8 @@ class RagStore:
 
         for item in candidates:
             if item["score"] < RAG_MIN_SCORE:
+                continue
+            if exclude_assessment and item.get("assessment_like"):
                 continue
 
             page_key = f'{item["doc_id"]}#{item["page"]}'
@@ -604,6 +668,7 @@ def public_sources(sources: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
             "category": source.get("category", "Other"),
             "page": source.get("page", 0),
             "score": round(float(source.get("score", 0.0)), 4),
+            "evidence_kind": source.get("evidence_kind", "exposition"),
             "snippet": snippet,
         }
 
