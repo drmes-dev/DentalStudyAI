@@ -742,6 +742,7 @@ def cross_check_past_paper_question(
 
     sources = rag_store.search(
         query,
+        categories=["Books"],
         top_k=4,
         exclude_assessment=True,
     )
