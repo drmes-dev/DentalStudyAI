@@ -4862,12 +4862,12 @@ function setMicState(state) {
 
 function cleanTextForSpeech(text) {
     return String(text || "")
-        .replace(/```[\\s\\S]*?```/g, " ")
-        .replace(/\\[S\\d+\\]/g, "")
-        .replace(/#{1,6}\\s*/g, "")
+        .replace(/```[\s\S]*?```/g, " ")
+        .replace(/\[S\d+\]/g, "")
+        .replace(/#{1,6}\s*/g, "")
         .replace(/[*_`>|]/g, " ")
-        .replace(/https?:\\/\\/\\S+/g, " ")
-        .replace(/\\s+/g, " ")
+        .replace(/https?:\/\/\S+/g, " ")
+        .replace(/\s+/g, " ")
         .trim();
 }
 
