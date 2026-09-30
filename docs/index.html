@@ -593,6 +593,10 @@ body {
     color: #b8a8ff;
 }
 
+.mode[data-mode="test"] .mode-icon {
+    color: #f8d97b;
+}
+
 /* Chat history */
 
 .history {
@@ -1754,6 +1758,345 @@ a.source-card:hover {
     line-height: 1.45;
 }
 
+/* =========================
+   TEST MODE
+========================= */
+
+.test-workspace {
+    display: none;
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 26px max(24px, calc((100% - 1040px) / 2)) 40px;
+}
+
+.test-workspace.show {
+    display: block;
+}
+
+.test-shell {
+    width: min(100%, 1040px);
+    margin: 0 auto;
+}
+
+.test-hero {
+    padding: 22px;
+    border: 1px solid rgba(103,232,249,.14);
+    border-radius: 22px;
+    background:
+        linear-gradient(
+            145deg,
+            rgba(14,31,52,.88),
+            rgba(9,20,36,.90)
+        );
+    box-shadow: 0 18px 44px rgba(0,0,0,.20);
+}
+
+.test-hero h2 {
+    margin: 0;
+    font-size: 21px;
+}
+
+.test-hero p {
+    margin: 7px 0 0;
+    color: #8298af;
+    font-size: 11px;
+    line-height: 1.6;
+}
+
+.readiness-grid,
+.test-stat-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 10px;
+    margin-top: 14px;
+}
+
+.readiness-card,
+.test-stat-card {
+    padding: 14px;
+    border: 1px solid rgba(137,190,255,.11);
+    border-radius: 15px;
+    background: rgba(255,255,255,.025);
+}
+
+.readiness-card.primary {
+    grid-column: span 2;
+    background:
+        linear-gradient(
+            135deg,
+            rgba(103,232,249,.09),
+            rgba(129,140,248,.08)
+        );
+}
+
+.readiness-label,
+.test-stat-label {
+    color: #71879e;
+    font-size: 8px;
+    text-transform: uppercase;
+    letter-spacing: .08em;
+}
+
+.readiness-value,
+.test-stat-value {
+    margin-top: 6px;
+    color: #eef8ff;
+    font-size: 22px;
+    font-weight: 820;
+}
+
+.readiness-note {
+    margin-top: 5px;
+    color: #668098;
+    font-size: 9px;
+}
+
+.test-panel {
+    margin-top: 14px;
+    padding: 18px;
+    border: 1px solid rgba(137,190,255,.11);
+    border-radius: 18px;
+    background: rgba(10,23,40,.78);
+}
+
+.test-panel h3 {
+    margin: 0 0 13px;
+    font-size: 14px;
+}
+
+.test-form-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+}
+
+.test-field {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.test-field label {
+    color: #7b91a8;
+    font-size: 9px;
+}
+
+.test-field input,
+.test-field select {
+    width: 100%;
+    padding: 10px 11px;
+    border: 1px solid rgba(137,190,255,.14);
+    border-radius: 11px;
+    outline: none;
+    background: rgba(4,14,27,.68);
+    color: #eaf5ff;
+    font: inherit;
+    font-size: 11px;
+}
+
+.test-field input:focus,
+.test-field select:focus {
+    border-color: rgba(103,232,249,.40);
+}
+
+.test-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-top: 13px;
+}
+
+.test-primary,
+.test-secondary {
+    border-radius: 12px;
+    padding: 10px 14px;
+    cursor: pointer;
+    font: inherit;
+    font-size: 10px;
+    font-weight: 780;
+}
+
+.test-primary {
+    border: 1px solid rgba(255,255,255,.16);
+    background: linear-gradient(135deg,#79f1ff,#8c8dff);
+    color: #06111f;
+}
+
+.test-secondary {
+    border: 1px solid rgba(137,190,255,.14);
+    background: rgba(255,255,255,.035);
+    color: #b9ccdf;
+}
+
+.test-primary:disabled,
+.test-secondary:disabled {
+    opacity: .5;
+    cursor: wait;
+}
+
+.owner-paper-panel {
+    display: none;
+}
+
+.owner-paper-panel.show {
+    display: block;
+}
+
+.paper-progress {
+    margin-top: 10px;
+    min-height: 18px;
+    color: #7f9ab4;
+    font-size: 10px;
+    line-height: 1.55;
+}
+
+.test-session {
+    display: none;
+}
+
+.test-session.show {
+    display: block;
+}
+
+.test-session-top {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    align-items: center;
+    margin-bottom: 13px;
+}
+
+.test-progress {
+    color: #8ea4bb;
+    font-size: 10px;
+}
+
+.test-timer {
+    color: #bdf7ff;
+    font-size: 12px;
+    font-weight: 800;
+}
+
+.test-question-card {
+    padding: 22px;
+    border: 1px solid rgba(137,190,255,.13);
+    border-radius: 20px;
+    background: rgba(10,23,40,.82);
+}
+
+.test-question-meta {
+    color: #6f879f;
+    font-size: 9px;
+    margin-bottom: 10px;
+}
+
+.test-question-stem {
+    color: #f1f7ff;
+    font-size: 14px;
+    line-height: 1.65;
+    font-weight: 680;
+}
+
+.test-options {
+    display: grid;
+    gap: 8px;
+    margin-top: 16px;
+}
+
+.test-option {
+    display: flex;
+    gap: 9px;
+    align-items: flex-start;
+    padding: 11px 12px;
+    border: 1px solid rgba(137,190,255,.10);
+    border-radius: 12px;
+    background: rgba(255,255,255,.025);
+    color: #bfd0e2;
+    cursor: pointer;
+    font-size: 11px;
+    line-height: 1.5;
+}
+
+.test-option:hover {
+    border-color: rgba(103,232,249,.26);
+    background: rgba(103,232,249,.04);
+}
+
+.test-option.selected {
+    border-color: rgba(103,232,249,.42);
+    background: rgba(103,232,249,.08);
+    color: #eefcff;
+}
+
+.test-result-grid {
+    display: grid;
+    grid-template-columns: repeat(4,minmax(0,1fr));
+    gap: 10px;
+    margin-top: 13px;
+}
+
+.test-review-item {
+    margin-top: 10px;
+    padding: 12px;
+    border: 1px solid rgba(137,190,255,.10);
+    border-radius: 12px;
+    background: rgba(255,255,255,.02);
+    font-size: 10px;
+    line-height: 1.55;
+}
+
+.test-review-item.correct {
+    border-color: rgba(74,222,128,.22);
+}
+
+.test-review-item.wrong {
+    border-color: rgba(251,113,133,.22);
+}
+
+.test-review-title {
+    color: #e8f3ff;
+    font-weight: 720;
+}
+
+.test-review-detail {
+    margin-top: 5px;
+    color: #8199b1;
+}
+
+.test-empty {
+    color: #6f879f;
+    font-size: 10px;
+    line-height: 1.55;
+}
+
+@media (max-width: 820px) {
+    .readiness-grid,
+    .test-stat-grid,
+    .test-result-grid,
+    .test-form-grid {
+        grid-template-columns: 1fr 1fr;
+    }
+
+    .readiness-card.primary {
+        grid-column: span 2;
+    }
+}
+
+@media (max-width: 520px) {
+    .readiness-grid,
+    .test-stat-grid,
+    .test-result-grid,
+    .test-form-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .readiness-card.primary {
+        grid-column: span 1;
+    }
+}
+
+
 /* Typing */
 
 .typing-row {
@@ -2679,6 +3022,24 @@ a.source-card:hover {
 
             <button
                 class="mode"
+                data-mode="test"
+                type="button"
+            >
+                <div class="mode-icon">✓</div>
+
+                <div>
+                    <div class="mode-name">
+                        Test Mode
+                    </div>
+
+                    <div class="mode-description">
+                        Past papers & readiness
+                    </div>
+                </div>
+            </button>
+
+            <button
+                class="mode"
                 data-mode="pdf"
                 type="button"
             >
@@ -2937,6 +3298,270 @@ a.source-card:hover {
         </section>
 
         <!-- =========================
+             TEST MODE
+        ========================== -->
+
+        <section
+            class="test-workspace"
+            id="testWorkspace"
+        >
+            <div class="test-shell">
+
+                <div
+                    class="test-dashboard"
+                    id="testDashboard"
+                >
+                    <div class="test-hero">
+                        <h2>Past Paper Test Centre</h2>
+                        <p>
+                            Practise cross-checked past-paper MCQs, identify weak
+                            topics, and track your own exam readiness without
+                            inventing cohort percentiles.
+                        </p>
+
+                        <div class="readiness-grid">
+                            <div class="readiness-card primary">
+                                <div class="readiness-label">
+                                    Dentora Readiness Index
+                                </div>
+                                <div
+                                    class="readiness-value"
+                                    id="readinessScore"
+                                >
+                                    —
+                                </div>
+                                <div
+                                    class="readiness-note"
+                                    id="readinessNote"
+                                >
+                                    Complete a test to establish your baseline.
+                                </div>
+                            </div>
+
+                            <div class="readiness-card">
+                                <div class="readiness-label">Accuracy</div>
+                                <div
+                                    class="readiness-value"
+                                    id="readinessAccuracy"
+                                >—</div>
+                            </div>
+
+                            <div class="readiness-card">
+                                <div class="readiness-label">Coverage</div>
+                                <div
+                                    class="readiness-value"
+                                    id="readinessCoverage"
+                                >—</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="test-stat-grid">
+                        <div class="test-stat-card">
+                            <div class="test-stat-label">Past papers</div>
+                            <div class="test-stat-value" id="bankPaperCount">0</div>
+                        </div>
+                        <div class="test-stat-card">
+                            <div class="test-stat-label">Structured questions</div>
+                            <div class="test-stat-value" id="bankQuestionCount">0</div>
+                        </div>
+                        <div class="test-stat-card">
+                            <div class="test-stat-label">Cross-checked MCQs</div>
+                            <div class="test-stat-value" id="bankEligibleCount">0</div>
+                        </div>
+                        <div class="test-stat-card">
+                            <div class="test-stat-label">Repeated groups</div>
+                            <div class="test-stat-value" id="bankRepeatedCount">0</div>
+                        </div>
+                    </div>
+
+                    <div class="test-panel">
+                        <h3>Build a test</h3>
+
+                        <div class="test-form-grid">
+                            <div class="test-field">
+                                <label for="testSubject">Subject</label>
+                                <select id="testSubject">
+                                    <option value="">All subjects</option>
+                                </select>
+                            </div>
+
+                            <div class="test-field">
+                                <label for="testTopic">Topic</label>
+                                <select id="testTopic">
+                                    <option value="">All topics</option>
+                                </select>
+                            </div>
+
+                            <div class="test-field">
+                                <label for="testYear">Paper year</label>
+                                <select id="testYear">
+                                    <option value="">All years</option>
+                                </select>
+                            </div>
+
+                            <div class="test-field">
+                                <label for="testQuestionCount">Questions</label>
+                                <input
+                                    id="testQuestionCount"
+                                    type="number"
+                                    min="1"
+                                    max="100"
+                                    value="20"
+                                >
+                            </div>
+
+                            <div class="test-field">
+                                <label for="testDuration">Time limit (minutes)</label>
+                                <input
+                                    id="testDuration"
+                                    type="number"
+                                    min="1"
+                                    max="240"
+                                    value="25"
+                                >
+                            </div>
+
+                            <div class="test-field">
+                                <label for="testStrategy">Test strategy</label>
+                                <select id="testStrategy">
+                                    <option value="random">Random cross-checked questions</option>
+                                    <option value="weak">Weak topics first</option>
+                                    <option value="repeated">Repeated past-paper questions</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="test-actions">
+                            <button
+                                class="test-primary"
+                                id="startTestButton"
+                                type="button"
+                            >
+                                Start test
+                            </button>
+
+                            <button
+                                class="test-secondary"
+                                id="refreshTestBankButton"
+                                type="button"
+                            >
+                                Refresh question bank
+                            </button>
+                        </div>
+                    </div>
+
+                    <div
+                        class="test-panel owner-paper-panel"
+                        id="ownerPaperPanel"
+                    >
+                        <h3>Add & cross-check a past paper</h3>
+
+                        <div class="test-form-grid">
+                            <div class="test-field">
+                                <label for="pastPaperFile">Past-paper PDF</label>
+                                <input
+                                    id="pastPaperFile"
+                                    type="file"
+                                    accept=".pdf,application/pdf"
+                                >
+                            </div>
+
+                            <div class="test-field">
+                                <label for="pastPaperSubject">Subject</label>
+                                <input
+                                    id="pastPaperSubject"
+                                    type="text"
+                                    placeholder="e.g. Orthodontics"
+                                >
+                            </div>
+
+                            <div class="test-field">
+                                <label for="pastPaperYear">Year</label>
+                                <input
+                                    id="pastPaperYear"
+                                    type="text"
+                                    placeholder="e.g. 2025"
+                                >
+                            </div>
+
+                            <div class="test-field">
+                                <label for="pastPaperTitle">Paper title</label>
+                                <input
+                                    id="pastPaperTitle"
+                                    type="text"
+                                    placeholder="Optional"
+                                >
+                            </div>
+                        </div>
+
+                        <div class="test-actions">
+                            <button
+                                class="test-primary"
+                                id="ingestPastPaperButton"
+                                type="button"
+                            >
+                                Structure & cross-check
+                            </button>
+                        </div>
+
+                        <div
+                            class="paper-progress"
+                            id="pastPaperProgress"
+                        ></div>
+                    </div>
+                </div>
+
+                <div
+                    class="test-session"
+                    id="testSession"
+                >
+                    <div class="test-session-top">
+                        <div class="test-progress" id="testProgress"></div>
+                        <div class="test-timer" id="testTimer">00:00</div>
+                    </div>
+
+                    <div
+                        class="test-question-card"
+                        id="testQuestionCard"
+                    ></div>
+
+                    <div class="test-actions">
+                        <button
+                            class="test-secondary"
+                            id="testPreviousButton"
+                            type="button"
+                        >
+                            Previous
+                        </button>
+
+                        <button
+                            class="test-secondary"
+                            id="testNextButton"
+                            type="button"
+                        >
+                            Next
+                        </button>
+
+                        <button
+                            class="test-primary"
+                            id="submitTestButton"
+                            type="button"
+                        >
+                            Submit test
+                        </button>
+                    </div>
+                </div>
+
+                <div
+                    class="test-session"
+                    id="testResults"
+                ></div>
+
+            </div>
+        </section>
+
+        <!-- =========================
              CHAT
         ========================== -->
 
@@ -3122,7 +3747,7 @@ a.source-card:hover {
    DENTORA CONFIGURATION
 ========================================================= */
 
-window.DENTORA_BUILD = "2026-09-30-voice-tutor-v1";
+window.DENTORA_BUILD = "2026-09-30-test-mode-v1";
 
 const API_BASE =
     "https://dentalstudyai.onrender.com";
@@ -3144,6 +3769,18 @@ const FEEDBACK_API =
 
 const TRANSCRIBE_API =
     API_BASE + "/transcribe";
+
+const PAST_PAPER_INGEST_API =
+    API_BASE + "/past-papers/ingest-pdf";
+
+const TEST_CATALOG_API =
+    API_BASE + "/test/catalog";
+
+const TEST_START_API =
+    API_BASE + "/test/start";
+
+const TEST_GRADE_API =
+    API_BASE + "/test/grade";
 
 
 /* =========================================================
@@ -3168,6 +3805,15 @@ let voiceChunks = [];
 let isRecordingVoice = false;
 let voiceRecordingTimer = null;
 let voiceReplyRequested = false;
+
+let testCatalog = null;
+let testHistory = [];
+let activeTest = null;
+let activeTestIndex = 0;
+let activeTestAnswers = {};
+let activeTestStartedAt = 0;
+let activeTestDurationSeconds = 0;
+let activeTestTimer = null;
 
 let ownerAccessCode =
     localStorage.getItem(
@@ -3294,6 +3940,73 @@ const betaUnlockButton =
 
 const betaError =
     document.getElementById("betaError");
+
+const testWorkspace =
+    document.getElementById("testWorkspace");
+const testDashboard =
+    document.getElementById("testDashboard");
+const testSession =
+    document.getElementById("testSession");
+const testResults =
+    document.getElementById("testResults");
+const ownerPaperPanel =
+    document.getElementById("ownerPaperPanel");
+const testSubject =
+    document.getElementById("testSubject");
+const testTopic =
+    document.getElementById("testTopic");
+const testYear =
+    document.getElementById("testYear");
+const testQuestionCount =
+    document.getElementById("testQuestionCount");
+const testDuration =
+    document.getElementById("testDuration");
+const testStrategy =
+    document.getElementById("testStrategy");
+const startTestButton =
+    document.getElementById("startTestButton");
+const refreshTestBankButton =
+    document.getElementById("refreshTestBankButton");
+const pastPaperFile =
+    document.getElementById("pastPaperFile");
+const pastPaperSubject =
+    document.getElementById("pastPaperSubject");
+const pastPaperYear =
+    document.getElementById("pastPaperYear");
+const pastPaperTitle =
+    document.getElementById("pastPaperTitle");
+const ingestPastPaperButton =
+    document.getElementById("ingestPastPaperButton");
+const pastPaperProgress =
+    document.getElementById("pastPaperProgress");
+const readinessScore =
+    document.getElementById("readinessScore");
+const readinessNote =
+    document.getElementById("readinessNote");
+const readinessAccuracy =
+    document.getElementById("readinessAccuracy");
+const readinessCoverage =
+    document.getElementById("readinessCoverage");
+const bankPaperCount =
+    document.getElementById("bankPaperCount");
+const bankQuestionCount =
+    document.getElementById("bankQuestionCount");
+const bankEligibleCount =
+    document.getElementById("bankEligibleCount");
+const bankRepeatedCount =
+    document.getElementById("bankRepeatedCount");
+const testProgress =
+    document.getElementById("testProgress");
+const testTimer =
+    document.getElementById("testTimer");
+const testQuestionCard =
+    document.getElementById("testQuestionCard");
+const testPreviousButton =
+    document.getElementById("testPreviousButton");
+const testNextButton =
+    document.getElementById("testNextButton");
+const submitTestButton =
+    document.getElementById("submitTestButton");
 
 
 /* =========================================================
@@ -3623,6 +4336,13 @@ const modeInfo = {
         subtitle: "Study directly from your uploaded material",
         placeholder:
             "Ask a question about your PDF..."
+    },
+
+    test: {
+        title: "Test Mode",
+        subtitle: "Past-paper practice and readiness tracking",
+        placeholder:
+            "Test Mode uses the structured question bank."
     }
 
 };
@@ -3846,6 +4566,7 @@ function formatAIText(text) {
 function showChatInterface() {
 
     welcome.style.display = "none";
+    testWorkspace.classList.remove("show");
 
     chatContainer.style.display =
         "flex";
@@ -3854,6 +4575,8 @@ function showChatInterface() {
 
 
 function showWelcomeInterface() {
+
+    testWorkspace.classList.remove("show");
 
     welcome.style.display =
         "flex";
@@ -4440,6 +5163,19 @@ function setMode(mode) {
 
     messageInput.placeholder =
         modeInfo[mode].placeholder;
+
+
+    if (mode === "test") {
+        welcome.style.display = "none";
+        chatContainer.style.display = "none";
+        testWorkspace.classList.add("show");
+        loadTestCatalog();
+        renderReadinessDashboard();
+        closeMobileMenu();
+        return;
+    }
+
+    testWorkspace.classList.remove("show");
 
 
     if (mode === "pdf") {
