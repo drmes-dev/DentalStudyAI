@@ -6477,7 +6477,7 @@ function showWelcomeInterface() {
         "flex";
 
     chatContainer.style.display =
-        "none";
+        "flex";
 
 }
 
@@ -7072,6 +7072,8 @@ function setMode(mode) {
 
     testWorkspace.classList.remove("show");
 
+    if (currentMessages.length === 0) showWelcomeInterface();
+    else showChatInterface();
 
     if (mode === "pdf") {
 
