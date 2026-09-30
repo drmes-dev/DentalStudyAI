@@ -633,7 +633,20 @@ class PastPaperStore:
         else:
             random.SystemRandom().shuffle(questions)
 
-        selected = questions[:max(1, min(int(count), 100))]
+        requested = max(1, min(int(count), 100))
+        selected = []
+        used_stems = set()
+
+        for item in questions:
+            stem_key = item.get("stem_hash") or item["id"]
+            if stem_key in used_stems:
+                continue
+
+            used_stems.add(stem_key)
+            selected.append(item)
+
+            if len(selected) >= requested:
+                break
 
         return [
             {
