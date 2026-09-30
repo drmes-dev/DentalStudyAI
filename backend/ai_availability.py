@@ -70,7 +70,7 @@ class ModelAvailability:
             "provider": "Error",
             "error_code": "quota_reached" if quota else "ai_unavailable",
             "retry_after": retry_after,
-            "response": ("Free AI quota reached or models temporarily unavailable. " if quota else
-                         "AI models are temporarily unavailable for this account. ") +
-                        "Import will retry from the saved page; saved questions remain available.",
+            "response": ("Cloud AI quota is temporarily exhausted or providers are busy. " if quota else
+                         "Cloud AI providers are temporarily unavailable. ") +
+                        "Dentora will retry from the saved page; already saved questions are safe.",
         }
