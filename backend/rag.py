@@ -627,6 +627,104 @@ class RagStore:
         documents.sort(key=lambda item: item.get("indexed_at", ""), reverse=True)
         return documents
 
+    def document_sample_pages(
+        self,
+        doc_id: str,
+        max_pages: int = 12,
+        max_chunks: int = 48,
+    ) -> List[Dict[str, Any]]:
+        """Reconstruct only the first few indexed pages of a document."""
+        index = self.connect()
+        if index is None:
+            return []
+
+        ids = sorted(
+            self._list_ids(
+                KNOWLEDGE_NS,
+                f"doc#{doc_id}#",
+            )
+        )
+
+        if not ids:
+            return []
+
+        pages: Dict[int, List[Dict[str, Any]]] = {}
+        fetched_chunks = 0
+
+        for start in range(0, len(ids), 50):
+            if fetched_chunks >= max_chunks:
+                break
+
+            batch = ids[start:start + 50]
+            fetched = index.fetch(
+                ids=batch,
+                namespace=KNOWLEDGE_NS,
+            )
+
+            items = []
+
+            for vector in _fetch_vectors(fetched).values():
+                metadata = _metadata(vector)
+
+                if metadata.get("record_type") != "chunk":
+                    continue
+
+                items.append({
+                    "page": int(metadata.get("page", 0) or 0),
+                    "chunk_index": int(
+                        metadata.get("chunk_index", 0)
+                        or 0
+                    ),
+                    "text": normalize_text(
+                        metadata.get("text", "")
+                    ),
+                })
+
+            items.sort(
+                key=lambda item: (
+                    item["page"],
+                    item["chunk_index"],
+                )
+            )
+
+            for item in items:
+                page = item["page"]
+
+                if (
+                    page not in pages
+                    and len(pages) >= max_pages
+                ):
+                    break
+
+                pages.setdefault(page, []).append(item)
+                fetched_chunks += 1
+
+                if fetched_chunks >= max_chunks:
+                    break
+
+            if len(pages) >= max_pages:
+                break
+
+        return [
+            {
+                "page": page_number,
+                "text": normalize_text(
+                    "\n".join(
+                        part["text"]
+                        for part in sorted(
+                            parts,
+                            key=lambda value:
+                                value["chunk_index"],
+                        )
+                    )
+                ),
+            }
+            for page_number, parts
+            in sorted(pages.items())
+            if parts
+        ]
+
+
     def document_pages(self, doc_id: str) -> List[Dict[str, Any]]:
         """Reconstruct readable page text from an already indexed RAG document.
 
