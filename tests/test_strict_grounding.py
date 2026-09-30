@@ -1,6 +1,6 @@
 import unittest
 
-from backend.main import is_strict_source_request
+from backend.rag import is_strict_source_request
 
 
 class StrictSourceRequestTests(unittest.TestCase):

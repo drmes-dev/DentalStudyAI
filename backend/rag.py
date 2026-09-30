@@ -181,6 +181,40 @@ def is_assessment_like(text: str) -> bool:
 
     return score >= 4
 
+def is_strict_source_request(message: str, mode: str = "") -> bool:
+    """Return True when the student explicitly wants a source-bound answer."""
+    text = re.sub(r"\s+", " ", str(message or "").lower()).strip()
+    mode_key = str(mode or "").strip().lower()
+
+    if mode_key in {"pdf tutor", "pdf", "source tutor"}:
+        return True
+
+    cues = (
+        "according to the uploaded",
+        "according to uploaded",
+        "according to the textbook",
+        "according to this textbook",
+        "uploaded textbook",
+        "uploaded book",
+        "uploaded resource",
+        "uploaded resources",
+        "provided textbook",
+        "provided book",
+        "from the uploaded",
+        "from this book",
+        "from this textbook",
+        "textbook page reference",
+        "textbook page references",
+        "pdf page reference",
+        "pdf page references",
+        "do not use information from",
+        "do not use outside",
+        "only use the uploaded",
+        "use only the uploaded",
+    )
+    return any(cue in text for cue in cues)
+
+
 def _matches(result) -> List[Any]:
     if isinstance(result, dict):
         return list(result.get("matches", []) or [])
