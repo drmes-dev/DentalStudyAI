@@ -78,7 +78,11 @@ jobs:
         run: python -m unittest discover -s tests -v
 
       - name: Check frontend JavaScript syntax
-        run: node --check /tmp/dentora-frontend.js
+        run: |
+          node --check /tmp/dentora-frontend.js
+          node --check docs/offline.js
+          node --check docs/sw.js
+          node tests/test_offline_browser.js
 
       - name: Check Windows RAG wizard syntax
         shell: pwsh

@@ -14,6 +14,9 @@
 >
 
 <title>Dentora by Ehsan</title>
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="icon" href="./icon.svg" type="image/svg+xml">
+<meta name="theme-color" content="#071423">
 
 <style>
 
@@ -3523,6 +3526,19 @@ a.source-card:hover {
                         </div>
                     </div>
 
+                    <div class="test-panel" id="offlineStudyPanel">
+                        <h3>Offline study</h3>
+                        <p>Save a small question pack while connected, then practise and grade tests without internet. Saved chats also remain readable. AI chat, PDF uploads, and new questions need internet.</p>
+                        <div class="test-actions">
+                            <button class="test-secondary" id="offlineSavePack" type="button">Save / update offline pack</button>
+                            <button class="test-secondary" id="offlineRemovePack" type="button" disabled>Remove saved pack</button>
+                        </div>
+                        <p><label><input type="checkbox" id="offlineUseSaved" disabled> Use saved questions</label></p>
+                        <p><label><input type="checkbox" id="offlineReliableOnly" checked> Offline tests: textbook-reviewed or printed answer keys only</label></p>
+                        <p id="offlinePackStatus" role="status">Checking saved questions…</p>
+                        <p>Select a subject above to save a smaller pack. Updating replaces the previous pack. Provisional AI keys can be included by unchecking the answer-key filter; they still need review.</p>
+                    </div>
+
                     <div
                         class="test-panel owner-paper-panel"
                         id="ownerPaperPanel"
@@ -3816,6 +3832,7 @@ a.source-card:hover {
     id="toastContainer"
 ></div>
 
+<script src="./offline.js"></script>
 <script>
 
 /* =========================================================
@@ -4295,6 +4312,11 @@ betaCodeInput.addEventListener(
 
 
 async function initializeBetaAccess() {
+    await DentoraOffline.ready;
+    if (DentoraOffline.isLocal() && DentoraOffline.hasPack()) {
+        hideBetaGate();
+        return;
+    }
     if (!dentoraAccessCode) {
         showBetaGate();
         return;
@@ -4306,6 +4328,10 @@ async function initializeBetaAccess() {
         );
         hideBetaGate();
     } catch (error) {
+        if (!navigator.onLine && DentoraOffline.hasPack()) {
+            hideBetaGate();
+            return;
+        }
         clearBetaAccess();
         showBetaGate(
             "Your saved beta access is no longer valid."
@@ -4348,6 +4374,10 @@ function setServiceStatus(state, text) {
 
 
 async function checkBackendHealth() {
+    if (!navigator.onLine) {
+        setServiceStatus("offline", "Offline · saved study available");
+        return;
+    }
     const controller = new AbortController();
     const timeout = setTimeout(
         () => controller.abort(),
@@ -5183,9 +5213,10 @@ async function repairExistingQuestionBank(
 async function loadTestCatalog(
     allowLegacyImport = true
 ) {
+    await DentoraOffline.ready;
     renderOwnerPaperPanel();
 
-    if (!dentoraAccessCode) {
+    if (!dentoraAccessCode && !DentoraOffline.hasPack()) {
         showBetaGate(
             "Enter your Dentora access code to open Test Mode."
         );
@@ -5194,7 +5225,7 @@ async function loadTestCatalog(
 
     if (
         ownerAccessCode &&
-        allowLegacyImport
+        allowLegacyImport && !DentoraOffline.isLocal()
     ) {
         bankPaperCount.textContent = "…";
         bankQuestionCount.textContent = "…";
@@ -5208,8 +5239,8 @@ async function loadTestCatalog(
 
     try {
         const response =
-            await fetch(
-                TEST_CATALOG_API,
+            await DentoraOffline.request(
+                "catalog", TEST_CATALOG_API,
                 {
                     headers:
                         betaHeaders(false),
@@ -5301,7 +5332,7 @@ async function loadTestCatalog(
 
         if (
             ownerAccessCode &&
-            allowLegacyImport &&
+            allowLegacyImport && !testCatalog.offline &&
             Number(
                 testCatalog.review_pending_mcqs ??
                 testCatalog.unresolved_mcqs ??
@@ -5417,6 +5448,7 @@ async function crossCheckImportedPaper(
 
 
 async function importExistingPastPapers(automatic = true) {
+    if (DentoraOffline.isLocal()) return 0;
     if (!ownerAccessCode || legacyPastPaperImportRunning) return 0;
     legacyPastPaperImportRunning = true;
     let savedBatches = -1;
@@ -5795,7 +5827,7 @@ function renderActiveTestQuestion() {
 
 
 async function startPastPaperTest() {
-    if (!dentoraAccessCode) {
+    if (!dentoraAccessCode && !DentoraOffline.hasPack()) {
         showBetaGate(
             "Enter your Dentora access code before starting a test."
         );
@@ -5815,8 +5847,8 @@ async function startPastPaperTest() {
                 : [];
 
         const response =
-            await fetch(
-                TEST_START_API,
+            await DentoraOffline.request(
+                "start", TEST_START_API,
                 {
                     method: "POST",
                     headers:
@@ -5874,7 +5906,8 @@ async function startPastPaperTest() {
 
         activeTest = {
             questions:
-                data.questions
+                data.questions,
+            offline: Boolean(data.offline)
         };
 
         activeTestIndex = 0;
@@ -6217,8 +6250,8 @@ async function submitActiveTest(
             );
 
         const response =
-            await fetch(
-                TEST_GRADE_API,
+            await DentoraOffline.request(
+                "grade", TEST_GRADE_API,
                 {
                     method: "POST",
                     headers:
@@ -6228,7 +6261,7 @@ async function submitActiveTest(
                             responses:
                                 responses
                         })
-                }
+                }, activeTest.offline
             );
 
         if (!response.ok) {
@@ -7850,6 +7883,11 @@ async function sendMessage() {
         return;
     }
 
+    if (!navigator.onLine) {
+        showToast("AI chat needs internet. Read saved chats or open Test Mode for offline practice.", "error");
+        return;
+    }
+
 
     const message =
         messageInput.value.trim();
@@ -8685,6 +8723,29 @@ function showPdfPanel() {
 ========================================================= */
 
 loadHistory();
+
+document.getElementById("offlineSavePack").addEventListener("click", async function() {
+    if (!dentoraAccessCode) { showBetaGate("Connect and unlock Dentora to save questions on this device."); return; }
+    this.disabled = true;
+    try {
+        const subject = testSubject.value;
+        const count = await DentoraOffline.save(API_BASE + "/test/offline-pack" +
+            (subject ? "?subject=" + encodeURIComponent(subject) : ""), {headers: betaHeaders(false)});
+        showToast(count + " questions saved for offline study.");
+    } catch (error) { showToast(error.message || "Could not save the offline pack.", "error"); }
+    finally { this.disabled = false; }
+});
+document.getElementById("offlineRemovePack").addEventListener("click", async function() {
+    try { await DentoraOffline.remove(); showToast("Saved question pack removed from this device."); loadTestCatalog(false); }
+    catch (_) { showToast("The saved pack could not be removed.", "error"); }
+});
+document.getElementById("offlineUseSaved").addEventListener("change", function() {
+    DentoraOffline.setLocal(this.checked);
+    loadTestCatalog(false);
+});
+document.getElementById("offlineReliableOnly").addEventListener("change", function() {
+    if (DentoraOffline.isLocal()) loadTestCatalog(false);
+});
 
 loadTestHistory();
 

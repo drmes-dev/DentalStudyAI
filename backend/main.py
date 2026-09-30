@@ -33,6 +33,7 @@ from rag import (
 )
 from test_engine import past_paper_store
 from ai_availability import AIUnavailable, ModelAvailability
+from offline_pack import build_offline_pack
 
 
 # =========================================================
@@ -1397,7 +1398,7 @@ OCR is too damaged or the item is genuinely ambiguous, return an empty answer.
 def root():
     return {
         "message": "Dentora backend is running.",
-        "version": "2.5.1-quota-aware-import",
+        "version": "2.6.0-offline-study",
     }
 
 
@@ -2955,6 +2956,19 @@ def start_test(
         "questions": questions,
         "answers_hidden": True,
     }
+
+
+@app.get("/test/offline-pack")
+def offline_question_pack(request: Request, subject: Optional[str] = None,
+                          x_dentora_beta_key: Optional[str] = Header(default=None, alias="X-Dentora-Beta-Key")):
+    require_beta_access(x_dentora_beta_key)
+    enforce_rate_limit(request, "offline-pack", 20, 3600)
+    if not past_paper_store.configured:
+        raise HTTPException(status_code=503, detail="The question bank is not configured.")
+    try:
+        return build_offline_pack(past_paper_store.list_questions(subject=subject), past_paper_store.list_papers())
+    except ValueError as exc:
+        raise HTTPException(status_code=413, detail=str(exc)) from None
 
 
 @app.post("/test/grade")
