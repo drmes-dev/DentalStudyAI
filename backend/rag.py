@@ -264,34 +264,48 @@ class RagStore:
         return bool(_fetch_vectors(result))
 
     def _list_ids(self, namespace: str, prefix: str) -> List[str]:
+        """Return actual vector IDs across Pinecone SDK response versions.
+
+        Recent Pinecone SDKs yield a ListResponse with a .vectors collection
+        of ListItem objects. Calling str(ListItem) produces a representation,
+        not its ID, and silently breaks subsequent index.fetch() calls.
+        """
         index = self.connect()
         if index is None:
             return []
 
+        def get_id(item: Any) -> Optional[str]:
+            if isinstance(item, str):
+                return item
+            if isinstance(item, dict):
+                return item.get("id") or item.get("_id")
+            return getattr(item, "id", None) or getattr(item, "_id", None)
+
         ids: List[str] = []
-
         try:
-            for batch in index.list(namespace=namespace, prefix=prefix):
-                if isinstance(batch, list):
-                    ids.extend(str(item) for item in batch)
-                elif isinstance(batch, dict):
-                    values = batch.get("vectors") or batch.get("ids") or []
-                    for item in values:
-                        if isinstance(item, dict):
-                            vector_id = item.get("id") or item.get("_id")
-                        else:
-                            vector_id = str(item)
-                        if vector_id:
-                            ids.append(str(vector_id))
+            for page in index.list(namespace=namespace, prefix=prefix):
+                if isinstance(page, (list, tuple)):
+                    entries = page
+                elif isinstance(page, dict):
+                    entries = page.get("vectors") or page.get("ids") or []
                 else:
-                    try:
-                        ids.extend(str(item) for item in batch)
-                    except Exception:
-                        pass
-        except Exception as exc:
-            print("Pinecone list error:", exc)
+                    entries = getattr(page, "vectors", None)
+                    if entries is None:
+                        entries = getattr(page, "ids", None)
+                    if entries is None:
+                        entries = list(page)
 
-        return ids
+                for item in entries:
+                    vector_id = get_id(item)
+                    if vector_id and str(vector_id).startswith(prefix):
+                        ids.append(str(vector_id))
+        except Exception as exc:
+            raise RuntimeError(
+                f"Could not list Pinecone records in namespace {namespace!r}: {exc}"
+            ) from exc
+
+        # Preserve order and avoid duplicate IDs across SDK pagination.
+        return list(dict.fromkeys(ids))
 
     def index_pages(
         self,
