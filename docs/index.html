@@ -3773,7 +3773,7 @@ a.source-card:hover {
    DENTORA CONFIGURATION
 ========================================================= */
 
-window.DENTORA_BUILD = "2026-09-30-simple-question-bank-v5";
+window.DENTORA_BUILD = "2026-09-30-simple-question-bank-v6";
 
 const API_BASE =
     "https://dentalstudyai.onrender.com";
@@ -3844,6 +3844,7 @@ let activeTestStartedAt = 0;
 let activeTestDurationSeconds = 0;
 let activeTestTimer = null;
 let legacyPastPaperImportRunning = false;
+let questionBankRepairRunning = false;
 
 let ownerAccessCode =
     localStorage.getItem(
@@ -5019,6 +5020,118 @@ function populateTestTopics(
 }
 
 
+async function repairExistingQuestionBank(
+    catalog
+) {
+    if (
+        !ownerAccessCode ||
+        questionBankRepairRunning ||
+        !catalog ||
+        Number(
+            catalog.unresolved_mcqs ||
+            0
+        ) <= 0
+    ) {
+        return false;
+    }
+
+    const papers =
+        Array.isArray(catalog.papers)
+            ? catalog.papers
+            : [];
+
+    if (papers.length === 0) {
+        return false;
+    }
+
+    questionBankRepairRunning = true;
+
+    if (ragPastPaperSyncStatus) {
+        ragPastPaperSyncStatus.textContent =
+            "Preparing answers for existing scanned MCQs…";
+    }
+
+    let changed = false;
+
+    try {
+        for (const paper of papers) {
+            const paperId =
+                String(
+                    paper.paper_id ||
+                    ""
+                ).trim();
+
+            if (!paperId) {
+                continue;
+            }
+
+            for (
+                let pass = 0;
+                pass < 40;
+                pass += 1
+            ) {
+                const response =
+                    await fetch(
+                        API_BASE +
+                        "/past-papers/" +
+                        encodeURIComponent(
+                            paperId
+                        ) +
+                        "/verify?batch_size=6",
+                        {
+                            method: "POST",
+                            headers:
+                                betaHeaders(false)
+                        }
+                    );
+
+                if (!response.ok) {
+                    break;
+                }
+
+                const data =
+                    await response.json();
+
+                if (
+                    Number(
+                        data.processed ||
+                        0
+                    ) > 0
+                ) {
+                    changed = true;
+                }
+
+                if (
+                    Number(
+                        data.pending_count ||
+                        0
+                    ) <= 0 ||
+                    Number(
+                        data.processed ||
+                        0
+                    ) <= 0
+                ) {
+                    break;
+                }
+            }
+        }
+
+        return changed;
+
+    } catch (error) {
+        console.error(
+            "Question bank preparation error:",
+            error
+        );
+
+        return changed;
+
+    } finally {
+        questionBankRepairRunning = false;
+    }
+}
+
+
 async function loadTestCatalog(
     allowLegacyImport = true
 ) {
@@ -5074,6 +5187,38 @@ async function loadTestCatalog(
 
         testCatalog =
             await response.json();
+
+        if (
+            ownerAccessCode &&
+            allowLegacyImport &&
+            Number(
+                testCatalog.unresolved_mcqs ||
+                0
+            ) > 0
+        ) {
+            const repaired =
+                await repairExistingQuestionBank(
+                    testCatalog
+                );
+
+            if (repaired) {
+                const refreshed =
+                    await fetch(
+                        TEST_CATALOG_API,
+                        {
+                            headers:
+                                betaHeaders(false),
+                            cache:
+                                "no-store"
+                        }
+                    );
+
+                if (refreshed.ok) {
+                    testCatalog =
+                        await refreshed.json();
+                }
+            }
+        }
 
         bankPaperCount.textContent =
             String(
