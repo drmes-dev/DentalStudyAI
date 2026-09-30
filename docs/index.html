@@ -3773,7 +3773,7 @@ a.source-card:hover {
    DENTORA CONFIGURATION
 ========================================================= */
 
-window.DENTORA_BUILD = "2026-09-30-simple-question-bank-v6";
+window.DENTORA_BUILD = "2026-09-30-auto-detect-scanned-bank-v7";
 
 const API_BASE =
     "https://dentalstudyai.onrender.com";
@@ -5028,7 +5028,8 @@ async function repairExistingQuestionBank(
         questionBankRepairRunning ||
         !catalog ||
         Number(
-            catalog.unresolved_mcqs ||
+            catalog.review_pending_mcqs ??
+            catalog.unresolved_mcqs ??
             0
         ) <= 0
     ) {
@@ -5045,11 +5046,6 @@ async function repairExistingQuestionBank(
     }
 
     questionBankRepairRunning = true;
-
-    if (ragPastPaperSyncStatus) {
-        ragPastPaperSyncStatus.textContent =
-            "Preparing answers for existing scanned MCQs…";
-    }
 
     let changed = false;
 
@@ -5188,38 +5184,6 @@ async function loadTestCatalog(
         testCatalog =
             await response.json();
 
-        if (
-            ownerAccessCode &&
-            allowLegacyImport &&
-            Number(
-                testCatalog.unresolved_mcqs ||
-                0
-            ) > 0
-        ) {
-            const repaired =
-                await repairExistingQuestionBank(
-                    testCatalog
-                );
-
-            if (repaired) {
-                const refreshed =
-                    await fetch(
-                        TEST_CATALOG_API,
-                        {
-                            headers:
-                                betaHeaders(false),
-                            cache:
-                                "no-store"
-                        }
-                    );
-
-                if (refreshed.ok) {
-                    testCatalog =
-                        await refreshed.json();
-                }
-            }
-        }
-
         bankPaperCount.textContent =
             String(
                 testCatalog.paper_count ||
@@ -5253,25 +5217,53 @@ async function loadTestCatalog(
             ragPastPaperSyncStatus &&
             ownerAccessCode
         ) {
-            const ragCount =
+            const paperCount =
                 Number(
-                    testCatalog.rag_past_paper_count ||
+                    testCatalog.paper_count ||
+                    0
+                );
+
+            const mcqCount =
+                Number(
+                    testCatalog.mcq_count ||
                     0
                 );
 
             ragPastPaperSyncStatus.textContent =
-                ragCount > 0
+                paperCount > 0
                     ? (
-                        "RAG Past Papers detected: " +
-                        ragCount +
-                        ". Test Mode bank is " +
+                        paperCount +
+                        " past paper" +
                         (
-                            testCatalog.rag_sync_complete
-                                ? "synchronized."
-                                : "still synchronizing."
-                        )
+                            paperCount === 1
+                                ? ""
+                                : "s"
+                        ) +
+                        " · " +
+                        mcqCount +
+                        " MCQs in the question bank."
                     )
-                    : "No RAG documents are currently categorized as Past Papers.";
+                    : "Scanning your indexed RAG PDFs for past-paper MCQs…";
+        }
+
+        if (
+            ownerAccessCode &&
+            allowLegacyImport &&
+            Number(
+                testCatalog.review_pending_mcqs ??
+                testCatalog.unresolved_mcqs ??
+                0
+            ) > 0
+        ) {
+            repairExistingQuestionBank(
+                testCatalog
+            ).then(
+                changed => {
+                    if (changed) {
+                        loadTestCatalog(false);
+                    }
+                }
+            );
         }
 
     } catch (error) {
@@ -5328,7 +5320,7 @@ async function crossCheckImportedPaper(
 
         if (!verifyResponse.ok) {
             throw new Error(
-                "Checking answers for paused while processing " +
+                "Answer review paused while processing " +
                 label +
                 "."
             );
@@ -5349,7 +5341,7 @@ async function crossCheckImportedPaper(
             pending;
 
         pastPaperProgress.textContent =
-            "Checking answers for " +
+            "Reviewing answers for " +
             label +
             "… " +
             done +
@@ -5362,7 +5354,7 @@ async function crossCheckImportedPaper(
             pending > 0
         ) {
             throw new Error(
-                "Checking answers for could not progress for " +
+                "Answer review could not progress for " +
                 label +
                 "."
             );
@@ -5446,15 +5438,10 @@ async function importExistingPastPapers(
 
             if (ragPastPaperSyncStatus) {
                 ragPastPaperSyncStatus.textContent =
-                    "Structured " +
+                    "Added " +
                     paperLabel +
-                    ". Preparing its MCQs for tests…";
+                    " to the MCQ bank.";
             }
-
-            await crossCheckImportedPaper(
-                data,
-                paperLabel
-            );
         }
 
         if (ragPastPaperSyncStatus) {
@@ -5605,75 +5592,8 @@ async function ingestPastPaper() {
         const data =
             await response.json();
 
-        let pending =
-            Number(
-                data.pending_count ||
-                0
-            );
-
-        const initial =
-            pending;
-
         pastPaperProgress.textContent =
-            "Structured " +
-            data.question_count +
-            " questions. Checking answers for MCQs against textbook evidence…";
-
-        while (pending > 0) {
-            const verifyResponse =
-                await fetch(
-                    API_BASE +
-                    "/past-papers/" +
-                    encodeURIComponent(
-                        data.paper_id
-                    ) +
-                    "/verify?batch_size=4",
-                    {
-                        method: "POST",
-                        headers:
-                            betaHeaders(false)
-                    }
-                );
-
-            if (!verifyResponse.ok) {
-                throw new Error(
-                    "Checking answers for paused because the verification service returned an error."
-                );
-            }
-
-            const verification =
-                await verifyResponse.json();
-
-            pending =
-                Number(
-                    verification
-                        .pending_count ||
-                    0
-                );
-
-            const done =
-                initial -
-                pending;
-
-            pastPaperProgress.textContent =
-                "Checking answers for answers… " +
-                done +
-                " of " +
-                initial +
-                " processed.";
-
-            if (
-                verification.processed === 0 &&
-                pending > 0
-            ) {
-                throw new Error(
-                    "Checking answers for could not progress. Try again after checking the AI provider."
-                );
-            }
-        }
-
-        pastPaperProgress.textContent =
-            "Past paper added to the question bank and ready for Test Mode.";
+            "Past paper added to the MCQ bank. Answer review will continue in the background.";
 
         showToast(
             "Past paper added to the test bank."
