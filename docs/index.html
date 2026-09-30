@@ -3600,6 +3600,328 @@ body {
     }
 }
 
+
+
+/* DENTORA SMOOTH MOTION + PERFORMANCE PASS v2
+   CSS-only performance tuning. No HTML, JS, API, IDs, storage, RAG,
+   question-bank or Test Mode behavior is changed.
+================================================================= */
+
+:root {
+    --motion-smooth: cubic-bezier(.16, 1, .3, 1);
+    --motion-soft: cubic-bezier(.22, .61, .36, 1);
+}
+
+/* Smoother scrolling in every independently scrolling workspace */
+.sidebar,
+.welcome,
+.messages,
+.test-workspace,
+#messageInput {
+    scroll-behavior: smooth;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+}
+
+/* Reduce expensive live blur while preserving the glass look */
+.sidebar {
+    backdrop-filter: blur(17px);
+    -webkit-backdrop-filter: blur(17px);
+}
+
+.header {
+    backdrop-filter: blur(17px);
+    -webkit-backdrop-filter: blur(17px);
+}
+
+.composer {
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
+}
+
+/* Keep the ambient orbs, but make their animation compositor-friendly */
+.orb {
+    filter: blur(64px);
+    will-change: transform;
+    backface-visibility: hidden;
+    transform: translate3d(0,0,0);
+}
+
+.background::before,
+.background::after,
+.header::before,
+.sidebar::after {
+    will-change: transform, opacity;
+    backface-visibility: hidden;
+}
+
+/*
+   Continuous changes to box-shadow, filter and background-position can repaint
+   large parts of the screen. Keep the same futuristic appearance while moving
+   continuous animation work to transform/opacity, which browsers can composite.
+*/
+.brand-logo {
+    animation: dentoraSmoothFloat 5.6s var(--motion-soft) infinite;
+    will-change: transform;
+}
+
+.mode.active {
+    animation: none;
+    box-shadow:
+        inset 0 1px 0 rgba(255,255,255,.075),
+        0 9px 27px rgba(0,0,0,.19),
+        0 0 24px rgba(103,232,249,.095);
+}
+
+.mode.active .mode-icon {
+    animation: dentoraSmoothIcon 3.8s var(--motion-soft) infinite;
+    will-change: transform, opacity;
+}
+
+.hero-kicker-dot {
+    box-shadow: 0 0 14px rgba(103,232,249,.76);
+    animation: dentoraSmoothDot 2.8s var(--motion-soft) infinite;
+    will-change: transform, opacity;
+}
+
+.suggestion,
+.send-button,
+.composer::before,
+.test-hero::before,
+.test-panel::before,
+.status-dot.online {
+    animation: none;
+}
+
+.status-dot.online {
+    box-shadow: 0 0 12px rgba(74,222,128,.62);
+}
+
+.send-button {
+    filter: none;
+}
+
+/* Static sheen remains; no repaint-heavy background-position loop */
+.composer::before {
+    opacity: .58;
+    background-position: 50% 0;
+    transition: opacity .34s var(--motion-smooth);
+}
+
+.composer:focus-within::before {
+    opacity: .94;
+}
+
+.test-hero::before,
+.test-panel::before {
+    opacity: .58;
+    background-position: 50% 0;
+}
+
+/* Smooth, transform-only ambient movement */
+@keyframes dentoraSmoothFloat {
+    0%,100% { transform: translate3d(0,0,0); }
+    50%     { transform: translate3d(0,-3px,0); }
+}
+
+@keyframes dentoraSmoothIcon {
+    0%,100% { transform: translate3d(0,0,0) scale(1); opacity: .92; }
+    50%     { transform: translate3d(0,-1px,0) scale(1.035); opacity: 1; }
+}
+
+@keyframes dentoraSmoothDot {
+    0%,100% { transform: translate3d(0,0,0) scale(.96); opacity: .80; }
+    50%     { transform: translate3d(0,0,0) scale(1.10); opacity: 1; }
+}
+
+/* Test screen entrance: remove animated blur and use pure compositing */
+.test-workspace.show .test-hero {
+    animation: dentoraSmoothPanelIn .46s var(--motion-smooth) both;
+}
+
+.test-workspace.show .test-stat-card {
+    animation: dentoraSmoothCardIn .44s var(--motion-smooth) both;
+}
+
+.test-workspace.show .test-panel {
+    animation: dentoraSmoothPanelIn .48s var(--motion-smooth) .10s both;
+}
+
+@keyframes dentoraSmoothPanelIn {
+    from {
+        opacity: 0;
+        transform: translate3d(0,8px,0) scale(.994);
+    }
+    to {
+        opacity: 1;
+        transform: translate3d(0,0,0) scale(1);
+    }
+}
+
+@keyframes dentoraSmoothCardIn {
+    from {
+        opacity: 0;
+        transform: translate3d(0,10px,0);
+    }
+    to {
+        opacity: 1;
+        transform: translate3d(0,0,0);
+    }
+}
+
+/* Consistent premium easing instead of several slightly different timings */
+.mode,
+.new-chat,
+.chat-item,
+.chat-delete,
+.icon-button,
+.attach-button,
+.mic-button,
+.send-button,
+.suggestion,
+.test-primary,
+.test-secondary,
+.test-option,
+.readiness-card,
+.test-stat-card,
+.test-field input,
+.test-field select,
+.remove-pdf {
+    will-change: auto;
+    transition-timing-function: var(--motion-smooth);
+}
+
+.mode,
+.new-chat,
+.chat-item,
+.icon-button,
+.attach-button,
+.mic-button,
+.send-button,
+.suggestion,
+.test-primary,
+.test-secondary,
+.test-option {
+    transition-duration: .28s;
+}
+
+.readiness-card,
+.test-stat-card,
+.test-field input,
+.test-field select {
+    transition-duration: .24s;
+}
+
+/* Make hover motion feel less jumpy */
+.mode:hover {
+    transform: translate3d(2px,-1px,0);
+}
+
+.new-chat:hover,
+.suggestion:hover,
+.test-stat-card:hover,
+.readiness-card:hover,
+.test-primary:hover,
+.test-secondary:hover {
+    transform: translate3d(0,-2px,0);
+}
+
+.icon-button:hover,
+.attach-button:hover,
+.mic-button:hover,
+.send-button:hover {
+    transform: translate3d(0,-2px,0) scale(1.015);
+}
+
+.test-option:hover {
+    transform: translate3d(2px,0,0);
+}
+
+/* Faster release makes clicks feel responsive without snapping */
+.mode:active,
+.new-chat:active,
+.suggestion:active,
+.icon-button:active,
+.attach-button:active,
+.mic-button:active,
+.send-button:active,
+.test-primary:active,
+.test-secondary:active,
+.test-option:active {
+    transition-duration: .10s;
+    transform: translate3d(0,0,0) scale(.985);
+}
+
+/* Avoid animating the expensive shadow itself on the cards */
+.readiness-card,
+.test-stat-card,
+.test-panel,
+.test-question-card {
+    transition-property: transform, border-color, background-color, opacity;
+}
+
+/* Keep focus feedback crisp but light */
+.test-field input:focus,
+.test-field select:focus,
+.composer:focus-within {
+    transition-duration: .20s;
+}
+
+/* The timer can breathe with opacity only; cheap and smooth */
+.test-timer {
+    animation: dentoraSmoothTimer 3.4s ease-in-out infinite;
+    will-change: opacity;
+}
+
+@keyframes dentoraSmoothTimer {
+    0%,100% { opacity: .88; }
+    50%     { opacity: 1; }
+}
+
+/* Slightly lower background motion load on smaller/lower-power screens */
+@media (max-width: 900px) {
+    .orb {
+        filter: blur(54px);
+        opacity: .14;
+    }
+
+    .background::before {
+        opacity: .15;
+    }
+
+    .background::after {
+        opacity: .24;
+    }
+
+    .sidebar,
+    .header,
+    .composer {
+        backdrop-filter: blur(14px);
+        -webkit-backdrop-filter: blur(14px);
+    }
+}
+
+/* Respect OS motion preferences exactly as before */
+@media (prefers-reduced-motion: reduce) {
+    .brand-logo,
+    .mode.active .mode-icon,
+    .hero-kicker-dot,
+    .test-workspace.show .test-hero,
+    .test-workspace.show .test-stat-card,
+    .test-workspace.show .test-panel,
+    .test-timer {
+        animation: none !important;
+    }
+
+    .sidebar,
+    .welcome,
+    .messages,
+    .test-workspace,
+    #messageInput {
+        scroll-behavior: auto;
+    }
+}
+
 </style>
 </head>
 
