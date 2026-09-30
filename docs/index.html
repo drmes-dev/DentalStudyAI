@@ -1636,7 +1636,8 @@ a.source-card:hover {
     margin-top: 7px;
 }
 
-.copy-button {
+.copy-button,
+.report-button {
     border: 0;
     background: transparent;
     color: #61758c;
@@ -1649,6 +1650,106 @@ a.source-card:hover {
 
 .copy-button:hover {
     color: var(--text);
+}
+
+.report-button:hover {
+    color: #fda4af;
+}
+
+.beta-gate {
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    background: rgba(2, 8, 18, .78);
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
+}
+
+.beta-gate.show {
+    display: flex;
+}
+
+.beta-card {
+    width: min(430px, 100%);
+    padding: 26px;
+    border: 1px solid rgba(103,232,249,.20);
+    border-radius: 24px;
+    background:
+        linear-gradient(
+            145deg,
+            rgba(16,37,61,.98),
+            rgba(8,19,34,.98)
+        );
+    box-shadow:
+        0 28px 90px rgba(0,0,0,.48),
+        0 0 40px rgba(103,232,249,.07);
+}
+
+.beta-card h2 {
+    margin: 0 0 8px;
+    font-size: 22px;
+}
+
+.beta-card p {
+    margin: 0 0 18px;
+    color: #8fa3bb;
+    font-size: 12px;
+    line-height: 1.6;
+}
+
+.beta-code-row {
+    display: flex;
+    gap: 8px;
+}
+
+.beta-code-input {
+    min-width: 0;
+    flex: 1;
+    padding: 12px 13px;
+    border-radius: 13px;
+    border: 1px solid rgba(137,190,255,.18);
+    outline: none;
+    background: rgba(3,12,24,.72);
+    color: var(--text);
+    font: inherit;
+}
+
+.beta-code-input:focus {
+    border-color: rgba(103,232,249,.50);
+    box-shadow: 0 0 0 3px rgba(103,232,249,.06);
+}
+
+.beta-unlock {
+    padding: 0 16px;
+    border: 0;
+    border-radius: 13px;
+    cursor: pointer;
+    font-weight: 800;
+    background: linear-gradient(135deg,#79f1ff,#8c8dff);
+    color: #07111f;
+}
+
+.beta-unlock:disabled {
+    opacity: .5;
+    cursor: wait;
+}
+
+.beta-error {
+    min-height: 18px;
+    margin-top: 10px;
+    color: #fda4af;
+    font-size: 10px;
+}
+
+.beta-small {
+    margin-top: 13px;
+    color: #607890;
+    font-size: 9px;
+    line-height: 1.45;
 }
 
 /* Typing */
@@ -2351,6 +2452,51 @@ a.source-card:hover {
     <div class="orb three"></div>
 </div>
 
+<div
+    class="beta-gate"
+    id="betaGate"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="betaGateTitle"
+>
+    <div class="beta-card">
+        <h2 id="betaGateTitle">Private beta access</h2>
+        <p>
+            Dentora is currently available to invited testers while
+            its 60-question validation study is being prepared.
+        </p>
+
+        <div class="beta-code-row">
+            <input
+                class="beta-code-input"
+                id="betaCodeInput"
+                type="password"
+                autocomplete="off"
+                placeholder="Enter beta access code"
+                aria-label="Beta access code"
+            >
+            <button
+                class="beta-unlock"
+                id="betaUnlockButton"
+                type="button"
+            >
+                Unlock
+            </button>
+        </div>
+
+        <div
+            class="beta-error"
+            id="betaError"
+            aria-live="polite"
+        ></div>
+
+        <div class="beta-small">
+            The code is kept in this browser session only.
+            Do not share it publicly.
+        </div>
+    </div>
+</div>
+
 <div class="overlay" id="overlay"></div>
 
 <div class="app">
@@ -2911,7 +3057,7 @@ a.source-card:hover {
    DENTORA CONFIGURATION
 ========================================================= */
 
-window.DENTORA_BUILD = "2026-09-30-public-beta-safety-v1";
+window.DENTORA_BUILD = "2026-09-30-private-beta-v1";
 
 const API_BASE =
     "https://dentalstudyai.onrender.com";
@@ -2924,6 +3070,12 @@ const PDF_API =
 
 const HEALTH_API =
     API_BASE + "/health";
+
+const BETA_VERIFY_API =
+    API_BASE + "/beta/verify";
+
+const FEEDBACK_API =
+    API_BASE + "/feedback";
 
 
 /* =========================================================
@@ -2941,6 +3093,11 @@ let isSending = false;
 let uploadedPdf = null;
 
 let chatHistory = [];
+
+let betaAccessCode =
+    sessionStorage.getItem(
+        "dentora_beta_access_code"
+    ) || "";
 
 let dentoraSessionId =
     localStorage.getItem(
@@ -3038,6 +3195,205 @@ const serviceStatusDot =
 
 const serviceStatusText =
     document.getElementById("serviceStatusText");
+
+const betaGate =
+    document.getElementById("betaGate");
+
+const betaCodeInput =
+    document.getElementById("betaCodeInput");
+
+const betaUnlockButton =
+    document.getElementById("betaUnlockButton");
+
+const betaError =
+    document.getElementById("betaError");
+
+
+/* =========================================================
+   PRIVATE BETA ACCESS
+========================================================= */
+
+function betaHeaders(includeJson = false) {
+    const headers = {};
+
+    if (includeJson) {
+        headers["Content-Type"] =
+            "application/json";
+    }
+
+    if (betaAccessCode) {
+        headers["X-Dentora-Beta-Key"] =
+            betaAccessCode;
+    }
+
+    return headers;
+}
+
+
+function showBetaGate(message = "") {
+    betaError.textContent =
+        message;
+
+    betaGate.classList.add(
+        "show"
+    );
+
+    setTimeout(
+        () => betaCodeInput.focus(),
+        50
+    );
+}
+
+
+function hideBetaGate() {
+    betaError.textContent = "";
+    betaCodeInput.value = "";
+    betaGate.classList.remove(
+        "show"
+    );
+}
+
+
+function clearBetaAccess() {
+    betaAccessCode = "";
+    sessionStorage.removeItem(
+        "dentora_beta_access_code"
+    );
+}
+
+
+async function verifyBetaAccess(code) {
+    const candidate =
+        String(code || "").trim();
+
+    if (!candidate) {
+        throw new Error(
+            "Enter your beta access code."
+        );
+    }
+
+    const response =
+        await fetch(
+            BETA_VERIFY_API,
+            {
+                method: "POST",
+                headers: {
+                    "X-Dentora-Beta-Key":
+                        candidate
+                }
+            }
+        );
+
+    if (!response.ok) {
+        let detail =
+            "Beta access could not be verified.";
+
+        try {
+            const data =
+                await response.json();
+
+            if (
+                data &&
+                typeof data.detail === "string"
+            ) {
+                detail = data.detail;
+            }
+        } catch (_) {}
+
+        throw new Error(detail);
+    }
+
+    betaAccessCode =
+        candidate;
+
+    sessionStorage.setItem(
+        "dentora_beta_access_code",
+        candidate
+    );
+
+    return true;
+}
+
+
+async function unlockBeta() {
+    betaUnlockButton.disabled =
+        true;
+
+    betaError.textContent =
+        "Checking…";
+
+    try {
+        await verifyBetaAccess(
+            betaCodeInput.value
+        );
+
+        hideBetaGate();
+
+        showToast(
+            "Beta access unlocked."
+        );
+    } catch (error) {
+        clearBetaAccess();
+        betaError.textContent =
+            error.message ||
+            "Invalid beta access code.";
+    } finally {
+        betaUnlockButton.disabled =
+            false;
+    }
+}
+
+
+betaUnlockButton.addEventListener(
+    "click",
+    unlockBeta
+);
+
+
+betaCodeInput.addEventListener(
+    "keydown",
+    function(event) {
+        if (event.key === "Enter") {
+            event.preventDefault();
+            unlockBeta();
+        }
+    }
+);
+
+
+async function initializeBetaAccess() {
+    if (!betaAccessCode) {
+        showBetaGate();
+        return;
+    }
+
+    try {
+        await verifyBetaAccess(
+            betaAccessCode
+        );
+        hideBetaGate();
+    } catch (error) {
+        clearBetaAccess();
+        showBetaGate(
+            "Your saved beta access is no longer valid."
+        );
+    }
+}
+
+
+function handleBetaAuthFailure(
+    response,
+    fallbackMessage
+) {
+    if (response.status === 401) {
+        clearBetaAccess();
+        showBetaGate(
+            "Your beta access code was not accepted."
+        );
+    }
+
+    return fallbackMessage;
+}
 
 
 /* =========================================================
@@ -3399,7 +3755,8 @@ function addMessage(
     role,
     provider = null,
     sources = [],
-    save = true
+    save = true,
+    questionContext = ""
 ) {
 
     showChatInterface();
@@ -3672,6 +4029,137 @@ function addMessage(
 
         actions.appendChild(
             copy
+        );
+
+
+        const report =
+            document.createElement("button");
+
+        report.className =
+            "report-button";
+
+        report.type =
+            "button";
+
+        report.textContent =
+            "Report wrong answer";
+
+
+        report.addEventListener(
+            "click",
+            async function() {
+
+                const reason =
+                    window.prompt(
+                        "What seems wrong with this answer?\n\nDo not include patient-identifying or sensitive information."
+                    );
+
+                if (
+                    !reason ||
+                    !reason.trim()
+                ) {
+                    return;
+                }
+
+                if (!betaAccessCode) {
+                    showBetaGate(
+                        "Enter your beta access code before submitting feedback."
+                    );
+                    return;
+                }
+
+                const sourceSummary =
+                    Array.isArray(sources)
+                        ? sources
+                            .map(source => {
+                                const label =
+                                    source.label || "S";
+                                const name =
+                                    source.filename ||
+                                    source.title ||
+                                    "source";
+                                const page =
+                                    source.page
+                                        ? " p." + source.page
+                                        : "";
+                                return label + " " + name + page;
+                            })
+                            .join(" | ")
+                            .slice(0, 4000)
+                        : "";
+
+                try {
+                    report.disabled = true;
+                    report.textContent =
+                        "Sending…";
+
+                    const response =
+                        await fetch(
+                            FEEDBACK_API,
+                            {
+                                method: "POST",
+                                headers:
+                                    betaHeaders(true),
+                                body:
+                                    JSON.stringify({
+                                        reason:
+                                            reason.trim(),
+                                        question:
+                                            String(
+                                                questionContext || ""
+                                            ).slice(0, 4000),
+                                        answer:
+                                            String(text)
+                                                .slice(0, 12000),
+                                        mode:
+                                            currentMode,
+                                        source_summary:
+                                            sourceSummary
+                                    })
+                            }
+                        );
+
+                    if (!response.ok) {
+                        if (
+                            response.status === 401
+                        ) {
+                            clearBetaAccess();
+                            showBetaGate(
+                                "Your beta access code was not accepted."
+                            );
+                        }
+
+                        throw new Error(
+                            "Feedback could not be sent."
+                        );
+                    }
+
+                    report.textContent =
+                        "Reported ✓";
+
+                    showToast(
+                        "Thanks — this answer was flagged for review."
+                    );
+
+                } catch (error) {
+                    report.textContent =
+                        "Report wrong answer";
+
+                    showToast(
+                        error.message ||
+                        "Feedback could not be sent.",
+                        "error"
+                    );
+                } finally {
+                    report.disabled = false;
+                }
+
+            }
+        );
+
+
+        actions.appendChild(
+            report
         );
 
         wrapper.appendChild(
@@ -3972,8 +4460,18 @@ function loadChat(id) {
     clearMessagesUI();
 
 
+    let lastUserQuestion =
+        "";
+
     currentMessages.forEach(
         message => {
+
+            if (
+                message.role === "user"
+            ) {
+                lastUserQuestion =
+                    message.content;
+            }
 
             addMessage(
                 message.content,
@@ -3982,7 +4480,10 @@ function loadChat(id) {
                 Array.isArray(message.sources)
                     ? message.sources
                     : [],
-                false
+                false,
+                message.role === "assistant"
+                    ? lastUserQuestion
+                    : ""
             );
 
         }
@@ -4164,6 +4665,13 @@ async function sendMessage() {
         return;
     }
 
+    if (!betaAccessCode) {
+        showBetaGate(
+            "Enter your beta access code before using Dentora."
+        );
+        return;
+    }
+
 
     isSending = true;
 
@@ -4208,10 +4716,8 @@ async function sendMessage() {
                     method:
                         "POST",
 
-                    headers: {
-                        "Content-Type":
-                            "application/json"
-                    },
+                    headers:
+                        betaHeaders(true),
 
                     body:
                         JSON.stringify({
@@ -4234,12 +4740,30 @@ async function sendMessage() {
 
 
         if (!response.ok) {
+            if (response.status === 401) {
+                clearBetaAccess();
+                showBetaGate(
+                    "Enter a valid beta access code to continue."
+                );
+            }
 
-            throw new Error(
+            let detail =
                 "Server returned HTTP " +
-                response.status
-            );
+                response.status;
 
+            try {
+                const errorData =
+                    await response.json();
+
+                if (
+                    errorData &&
+                    typeof errorData.detail === "string"
+                ) {
+                    detail = errorData.detail;
+                }
+            } catch (_) {}
+
+            throw new Error(detail);
         }
 
 
@@ -4300,7 +4824,9 @@ async function sendMessage() {
             data.provider || null,
             Array.isArray(data.sources)
                 ? data.sources
-                : []
+                : [],
+            true,
+            message
         );
 
 
@@ -4638,13 +5164,22 @@ pdfInput.addEventListener(
         }
 
 
+        if (!betaAccessCode) {
+            showBetaGate(
+                "Enter your beta access code before uploading a PDF."
+            );
+            pdfInput.value = "";
+            return;
+        }
+
+
         if (
             file.size >
-            25 * 1024 * 1024
+            20 * 1024 * 1024
         ) {
 
             showToast(
-                "PDF is too large. Maximum size is 25 MB.",
+                "PDF is too large. Maximum size is 20 MB.",
                 "error"
             );
 
@@ -4697,6 +5232,9 @@ pdfInput.addEventListener(
                         method:
                             "POST",
 
+                        headers:
+                            betaHeaders(false),
+
                         body:
                             formData
                     }
@@ -4704,6 +5242,13 @@ pdfInput.addEventListener(
 
 
             if (!response.ok) {
+                if (response.status === 401) {
+                    clearBetaAccess();
+                    showBetaGate(
+                        "Enter a valid beta access code to use PDF Tutor."
+                    );
+                }
+
                 let detail =
                     "PDF upload failed: HTTP " +
                     response.status;
@@ -4820,7 +5365,9 @@ document
                         dentoraSessionId
                     ),
                     {
-                        method: "DELETE"
+                        method: "DELETE",
+                        headers:
+                            betaHeaders(false)
                     }
                 );
             } catch (error) {
@@ -4869,6 +5416,8 @@ loadHistory();
 renderHistory();
 
 checkBackendHealth();
+
+initializeBetaAccess();
 
 setInterval(
     checkBackendHealth,

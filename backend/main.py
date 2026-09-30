@@ -12,6 +12,7 @@ from typing import Any, Dict, List, Optional
 import os
 import re
 import time
+import hmac
 from threading import Lock
 
 import pytesseract
@@ -38,6 +39,7 @@ from rag import (
 load_dotenv()
 
 DENTORA_ADMIN_KEY = os.getenv("DENTORA_ADMIN_KEY", "").strip()
+DENTORA_BETA_ACCESS_CODE = os.getenv("DENTORA_BETA_ACCESS_CODE", "").strip()
 MAX_WEB_INGEST_MB = int(os.getenv("MAX_WEB_INGEST_MB", "45"))
 MAX_WEB_OCR_PAGES = int(os.getenv("MAX_WEB_OCR_PAGES", "30"))
 
@@ -78,7 +80,7 @@ app.add_middleware(
     allow_origins=ALLOWED_ORIGINS,
     allow_credentials=False,
     allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
-    allow_headers=["Content-Type", "X-Dentora-Admin-Key"],
+    allow_headers=["Content-Type", "X-Dentora-Admin-Key", "X-Dentora-Beta-Key"],
 )
 
 
@@ -114,6 +116,14 @@ class RagSearchRequest(BaseModel):
     top_k: int = Field(default=7, ge=1, le=20)
 
 
+class FeedbackRequest(BaseModel):
+    reason: str = Field(min_length=2, max_length=2000)
+    question: str = Field(default="", max_length=4000)
+    answer: str = Field(default="", max_length=12000)
+    mode: str = Field(default="", max_length=40)
+    source_summary: str = Field(default="", max_length=4000)
+
+
 # =========================================================
 # TEMPORARY PDF SESSION MEMORY
 # =========================================================
@@ -126,6 +136,9 @@ session_pdfs: Dict[str, Dict[str, Any]] = {}
 
 _rate_events: Dict[str, List[float]] = {}
 _rate_lock = Lock()
+
+feedback_events: List[Dict[str, Any]] = []
+_feedback_lock = Lock()
 
 
 def _client_ip(request: Request) -> str:
@@ -306,10 +319,38 @@ def require_admin(supplied_key: Optional[str]):
             detail="DENTORA_ADMIN_KEY is not configured on the server.",
         )
 
-    if supplied_key != DENTORA_ADMIN_KEY:
+    if not supplied_key or not hmac.compare_digest(
+        supplied_key,
+        DENTORA_ADMIN_KEY,
+    ):
         raise HTTPException(
             status_code=401,
             detail="Invalid admin key.",
+        )
+
+
+def require_beta_access(supplied_key: Optional[str]):
+    """Require the separate student beta access code.
+
+    Never reuse DENTORA_ADMIN_KEY here. The beta code may be shared with
+    invited students; the admin key must remain private.
+    """
+    if not DENTORA_BETA_ACCESS_CODE:
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "Dentora beta access is not configured yet. "
+                "The administrator needs to set DENTORA_BETA_ACCESS_CODE."
+            ),
+        )
+
+    if not supplied_key or not hmac.compare_digest(
+        supplied_key,
+        DENTORA_BETA_ACCESS_CODE,
+    ):
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid beta access code.",
         )
 
 
@@ -473,7 +514,27 @@ def health():
         "ok": True,
         "service": "Dentora API",
         "rag_configured": rag_store.configured,
+        "beta_access_required": True,
+        "beta_access_configured": bool(DENTORA_BETA_ACCESS_CODE),
     }
+
+
+@app.post("/beta/verify")
+def beta_verify(
+    request: Request,
+    x_dentora_beta_key: Optional[str] = Header(
+        default=None,
+        alias="X-Dentora-Beta-Key",
+    ),
+):
+    enforce_rate_limit(
+        request,
+        "beta-verify",
+        12,
+        15 * 60,
+    )
+    require_beta_access(x_dentora_beta_key)
+    return {"ok": True, "access": "beta"}
 
 
 @app.get("/rag/status")
@@ -490,7 +551,13 @@ async def upload_pdf(
     request: Request,
     file: UploadFile = File(...),
     session_id: str = Form("default"),
+    x_dentora_beta_key: Optional[str] = Header(
+        default=None,
+        alias="X-Dentora-Beta-Key",
+    ),
 ):
+    require_beta_access(x_dentora_beta_key)
+
     enforce_rate_limit(
         request,
         "pdf-upload",
@@ -593,7 +660,13 @@ async def upload_pdf(
 def remove_session_pdf(
     session_id: str,
     request: Request,
+    x_dentora_beta_key: Optional[str] = Header(
+        default=None,
+        alias="X-Dentora-Beta-Key",
+    ),
 ):
+    require_beta_access(x_dentora_beta_key)
+
     enforce_rate_limit(
         request,
         "pdf-remove",
@@ -778,6 +851,71 @@ def rag_delete_document(
 
 
 # =========================================================
+# FEEDBACK
+# =========================================================
+
+@app.post("/feedback")
+def submit_feedback(
+    feedback: FeedbackRequest,
+    request: Request,
+    x_dentora_beta_key: Optional[str] = Header(
+        default=None,
+        alias="X-Dentora-Beta-Key",
+    ),
+):
+    require_beta_access(x_dentora_beta_key)
+    enforce_rate_limit(
+        request,
+        "feedback",
+        10,
+        60 * 60,
+    )
+
+    item = {
+        "feedback_id": f"fb-{int(time.time() * 1000)}",
+        "created_at": time.time(),
+        "reason": feedback.reason.strip(),
+        "question": feedback.question.strip(),
+        "answer": feedback.answer.strip(),
+        "mode": feedback.mode.strip(),
+        "source_summary": feedback.source_summary.strip(),
+    }
+
+    with _feedback_lock:
+        feedback_events.append(item)
+        if len(feedback_events) > 500:
+            del feedback_events[:-500]
+
+    print(
+        "Dentora feedback:",
+        item["feedback_id"],
+        item["reason"][:160],
+    )
+
+    return {
+        "success": True,
+        "feedback_id": item["feedback_id"],
+        "message": "Feedback received.",
+    }
+
+
+@app.get("/feedback")
+def list_feedback(
+    x_dentora_admin_key: Optional[str] = Header(
+        default=None,
+        alias="X-Dentora-Admin-Key",
+    ),
+):
+    require_admin(x_dentora_admin_key)
+
+    with _feedback_lock:
+        return {
+            "count": len(feedback_events),
+            "feedback": list(reversed(feedback_events[-200:])),
+        }
+
+
+# =========================================================
 # CHAT
 # =========================================================
 
@@ -785,7 +923,13 @@ def rag_delete_document(
 def chat(
     request: ChatRequest,
     http_request: Request,
+    x_dentora_beta_key: Optional[str] = Header(
+        default=None,
+        alias="X-Dentora-Beta-Key",
+    ),
 ):
+    require_beta_access(x_dentora_beta_key)
+
     enforce_rate_limit(
         http_request,
         "chat",
