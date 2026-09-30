@@ -663,11 +663,15 @@ def _local_past_paper_mcqs(
     questions: List[Dict[str, Any]] = []
     seen = set()
 
+    # OCR engines often flatten an entire page into one line. Do not require
+    # question numbers to start a physical line; a preceding whitespace
+    # boundary is enough. The option parser still requires explicit labels,
+    # keeping this fallback deliberately conservative.
     question_start = re.compile(
-        r"(?im)^\s*(?:q(?:uestion)?\s*)?(\d{1,3})\s*[\)\].:\-]\s*(?=\S)"
+        r"(?i)(?:^|\s)(?:q(?:uestion)?\.?\s*)?(\d{1,3})\s*[\)\].:\-]\s*(?=\S)"
     )
     option_marker = re.compile(
-        r"(?i)(?<![A-Za-z0-9])\(?([A-E])\)?\s*[\)\].:\-]\s+(?=\S)"
+        r"(?i)(?<![A-Za-z0-9])(?:\(([A-E])\)|([A-E])[\)\].:\-])\s*(?=\S)"
     )
     answer_marker = re.compile(
         r"(?i)\b(?:ans(?:wer)?|key)\s*[:=\-]?\s*\(?([A-E])\)?\b"
@@ -704,7 +708,7 @@ def _local_past_paper_mcqs(
 
             options: Dict[str, str] = {}
             for option_index, option_match in enumerate(option_matches):
-                label = option_match.group(1).upper()
+                label = (option_match.group(1) or option_match.group(2)).upper()
                 value_end = (
                     option_matches[option_index + 1].start()
                     if option_index + 1 < len(option_matches)
@@ -826,9 +830,15 @@ RULES
         if generated.get("provider") == "Error":
             if local_fallback:
                 print(
-                    f"Past-paper AI unavailable; using conservative local OCR parser "
-                    f"for {len(local_fallback)} MCQs."
+                    f"Past-paper AI unavailable; saving {len(local_fallback)} "
+                    "conservatively parsed OCR MCQs without advancing the page checkpoint."
                 )
+                retry_after = max(1, int(generated.get("retry_after", 60) or 60))
+                retry_message = str(generated.get("response", "") or "")
+                for item in local_fallback:
+                    item["_local_fallback"] = True
+                    item["_retry_after"] = retry_after
+                    item["_retry_message"] = retry_message
                 return local_fallback
             raise AIUnavailable(generated)
 
@@ -2482,6 +2492,35 @@ def structure_existing_rag_paper(
         subject=subject,
     )
 
+    fallback_used = any(
+        bool(item.get("_local_fallback"))
+        for item in questions
+        if isinstance(item, dict)
+    )
+    fallback_retry_after = max(
+        [
+            int(item.get("_retry_after", 60) or 60)
+            for item in questions
+            if isinstance(item, dict) and item.get("_local_fallback")
+        ]
+        or [60]
+    )
+    fallback_message = next(
+        (
+            str(item.get("_retry_message", "") or "")
+            for item in questions
+            if isinstance(item, dict) and item.get("_local_fallback")
+        ),
+        "",
+    )
+
+    # Internal fallback markers must never enter persistent question metadata.
+    for item in questions:
+        if isinstance(item, dict):
+            item.pop("_local_fallback", None)
+            item.pop("_retry_after", None)
+            item.pop("_retry_message", None)
+
     if not incremental:
         questions = canonicalize_past_paper_topics(questions, subject)
 
@@ -2489,6 +2528,12 @@ def structure_existing_rag_paper(
         raise ValueError(
             "No clear examination questions could be structured from this indexed PDF."
         )
+
+    # When cloud AI is unavailable, save every MCQ the conservative OCR parser
+    # can recover, but deliberately keep the checkpoint on the same page range.
+    # A later retry can then enrich/recover anything the fallback missed instead
+    # of silently skipping part of the paper.
+    committed_end = offset if (incremental and fallback_used) else end
 
     result = past_paper_store.index_paper(
         paper_id=doc_id,
@@ -2499,9 +2544,9 @@ def structure_existing_rag_paper(
         questions=questions,
         replace_existing=not incremental,
         import_progress=({
-            "processed_pages": end,
+            "processed_pages": committed_end,
             "total_import_pages": total_pages,
-            "import_complete": end >= total_pages,
+            "import_complete": committed_end >= total_pages,
         } if incremental else None),
     )
 
@@ -2512,10 +2557,22 @@ def structure_existing_rag_paper(
             "category",
             "",
         ),
-        "processed_pages": end,
+        "processed_pages": committed_end,
         "total_pages": total_pages,
-        "complete": end >= total_pages,
+        "complete": committed_end >= total_pages,
     })
+
+    if incremental and fallback_used:
+        result.update({
+            "deferred": True,
+            "retry_after": fallback_retry_after,
+            "message": (
+                f"{len(questions)} MCQs were safely recovered from OCR and saved. "
+                "Cloud AI is temporarily unavailable, so Dentora kept the page "
+                "checkpoint here and will retry the same pages for full structuring. "
+                + fallback_message
+            ).strip(),
+        })
 
     return result
 
@@ -2866,6 +2923,21 @@ def paper_sync_worker():
                 with _paper_sync_lock:
                     _paper_sync_state.update(message="All detected past papers have been processed.", complete=True)
                 break
+
+            if result.get("deferred"):
+                delay = max(1, int(result.get("retry_after", 60) or 60))
+                retry_at = time.time() + delay
+                with _paper_sync_lock:
+                    _paper_sync_state.update(
+                        message=result.get("message", "OCR questions saved; waiting to retry cloud structuring."),
+                        saved_batches=_paper_sync_state.get("saved_batches", 0) + 1,
+                        retrying=True,
+                        retry_at=retry_at,
+                    )
+                while time.time() < retry_at:
+                    time.sleep(min(60, max(0.01, retry_at - time.time())))
+                continue
+
             with _paper_sync_lock:
                 _paper_sync_state.update(
                     message=f"{result.get('title', 'Past paper')} · {result.get('processed_pages', 0)}/{result.get('total_pages', 0)} pages processed · {result.get('question_count', 0)} questions saved.",
