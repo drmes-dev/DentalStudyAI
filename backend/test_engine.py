@@ -127,6 +127,19 @@ class PastPaperStore:
                     f"{paper_id}|{position}|{stem}".encode("utf-8")
                 ).hexdigest()[:16]
 
+            suggested_answer = _clean(
+                raw.get("suggested_answer"),
+                40,
+            ).upper()
+
+            valid_option_labels = {
+                str(key).strip().upper()
+                for key in options.keys()
+            }
+
+            if suggested_answer not in valid_option_labels:
+                suggested_answer = ""
+
             item = {
                 "question_id": question_id,
                 "question_number": _clean(raw.get("question_number") or position, 80),
@@ -138,6 +151,11 @@ class PastPaperStore:
                 "page": int(raw.get("page") or 0),
                 "marks": float(raw.get("marks") or 0),
                 "provided_answer": _clean(raw.get("provided_answer"), 40).upper(),
+                "provisional_answer": suggested_answer,
+                "provisional_confidence": _clean(
+                    raw.get("suggested_confidence"),
+                    40,
+                ).lower(),
                 "verification_status": "pending" if options else "not_auto_gradable",
                 "verified_answer": "",
                 "verification_confidence": "",
@@ -177,6 +195,8 @@ class PastPaperStore:
                 "page": item["page"],
                 "marks": item["marks"],
                 "provided_answer": item["provided_answer"],
+                "provisional_answer": item["provisional_answer"],
+                "provisional_confidence": item["provisional_confidence"],
                 "verification_status": item["verification_status"],
                 "verified_answer": "",
                 "verification_confidence": "",
@@ -272,6 +292,11 @@ class PastPaperStore:
             "page": int(metadata.get("page", 0) or 0),
             "marks": float(metadata.get("marks", 0) or 0),
             "provided_answer": metadata.get("provided_answer", ""),
+            "provisional_answer": metadata.get("provisional_answer", ""),
+            "provisional_confidence": metadata.get(
+                "provisional_confidence",
+                "",
+            ),
             "verification_status": metadata.get("verification_status", ""),
             "verified_answer": metadata.get("verified_answer", ""),
             "verification_confidence": metadata.get("verification_confidence", ""),
@@ -390,6 +415,7 @@ class PastPaperStore:
                 and not (
                     item.get("verified_answer")
                     or item.get("provided_answer")
+                    or item.get("provisional_answer")
                 )
                 and item.get("verification_status")
                     in {"pending", "insufficient"}
@@ -586,10 +612,27 @@ class PastPaperStore:
             if (
                 item.get("verified_answer")
                 or item.get("provided_answer")
+                or item.get("provisional_answer")
             ):
                 ready += 1
             else:
                 unresolved += 1
+
+        review_pending = sum(
+            1
+            for item in mcqs
+            if (
+                item.get("verification_status")
+                    in {"pending", "insufficient"}
+                and int(
+                    item.get(
+                        "verification_attempts",
+                        0,
+                    )
+                    or 0
+                ) < 1
+            )
+        )
 
         return {
             "configured": True,
@@ -600,6 +643,7 @@ class PastPaperStore:
             # Backwards-compatible alias for older frontend builds.
             "eligible_test_questions": ready,
             "unresolved_mcqs": unresolved,
+            "review_pending_mcqs": review_pending,
             "subject_count": len(subjects),
             "subjects": [
                 {"name": key, "count": value}
@@ -760,9 +804,15 @@ class PastPaperStore:
                 or ""
             ).upper()
 
+            provisional_answer = str(
+                item.get("provisional_answer", "")
+                or ""
+            ).upper()
+
             expected = (
                 verified_answer
                 or provided_answer
+                or provisional_answer
             )
 
             answer_source = (
@@ -771,7 +821,11 @@ class PastPaperStore:
                 else (
                     "past_paper_key"
                     if provided_answer
-                    else "unresolved"
+                    else (
+                        "ai_prepared"
+                        if provisional_answer
+                        else "unresolved"
+                    )
                 )
             )
 
