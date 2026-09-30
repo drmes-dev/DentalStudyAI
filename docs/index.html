@@ -3479,35 +3479,9 @@ a.source-card:hover {
                         class="test-panel owner-paper-panel"
                         id="ownerPaperPanel"
                     >
-                        <h3>Add & cross-check a past paper</h3>
-
-                        <div class="test-field" style="margin-bottom:12px;">
-                            <label for="existingRagPaperSelect">
-                                Already in your RAG library
-                            </label>
-                            <select id="existingRagPaperSelect">
-                                <option value="">
-                                    Loading RAG documents…
-                                </option>
-                            </select>
-                        </div>
-
-                        <div class="test-actions" style="margin-top:0;margin-bottom:14px;">
-                            <button
-                                class="test-primary"
-                                id="importSelectedRagPaperButton"
-                                type="button"
-                            >
-                                Use selected RAG paper
-                            </button>
-
-                            <button
-                                class="test-secondary"
-                                id="reloadRagPaperListButton"
-                                type="button"
-                            >
-                                Reload RAG list
-                            </button>
+                        <h3>Add a new past paper</h3>
+                        <div class="paper-progress" id="ragPastPaperSyncStatus">
+                            Past Papers already indexed in RAG are synchronized automatically.
                         </div>
 
                         <div class="test-form-grid">
@@ -3554,15 +3528,7 @@ a.source-card:hover {
                                 id="ingestPastPaperButton"
                                 type="button"
                             >
-                                Structure & cross-check
-                            </button>
-
-                            <button
-                                class="test-secondary"
-                                id="importExistingPastPapersButton"
-                                type="button"
-                            >
-                                Import already indexed past papers
+                                Structure & cross-check new PDF
                             </button>
                         </div>
 
@@ -3808,7 +3774,7 @@ a.source-card:hover {
    DENTORA CONFIGURATION
 ========================================================= */
 
-window.DENTORA_BUILD = "2026-09-30-direct-rag-paper-import-v3";
+window.DENTORA_BUILD = "2026-09-30-auto-rag-bank-sync-v4";
 
 const API_BASE =
     "https://dentalstudyai.onrender.com";
@@ -3836,12 +3802,6 @@ const PAST_PAPER_INGEST_API =
 
 const PAST_PAPER_IMPORT_API =
     API_BASE + "/past-papers/import-existing";
-
-const PAST_PAPER_RAG_DOCUMENTS_API =
-    API_BASE + "/past-papers/rag-sources";
-
-const PAST_PAPER_IMPORT_RAG_API =
-    API_BASE + "/past-papers/import-source";
 
 const TEST_CATALOG_API =
     API_BASE + "/test/catalog";
@@ -3885,7 +3845,6 @@ let activeTestStartedAt = 0;
 let activeTestDurationSeconds = 0;
 let activeTestTimer = null;
 let legacyPastPaperImportRunning = false;
-let legacyPastPaperImportAttempted = false;
 
 let ownerAccessCode =
     localStorage.getItem(
@@ -4023,12 +3982,6 @@ const testResults =
     document.getElementById("testResults");
 const ownerPaperPanel =
     document.getElementById("ownerPaperPanel");
-const existingRagPaperSelect =
-    document.getElementById("existingRagPaperSelect");
-const importSelectedRagPaperButton =
-    document.getElementById("importSelectedRagPaperButton");
-const reloadRagPaperListButton =
-    document.getElementById("reloadRagPaperListButton");
 const testSubject =
     document.getElementById("testSubject");
 const testTopic =
@@ -4055,10 +4008,10 @@ const pastPaperTitle =
     document.getElementById("pastPaperTitle");
 const ingestPastPaperButton =
     document.getElementById("ingestPastPaperButton");
-const importExistingPastPapersButton =
-    document.getElementById("importExistingPastPapersButton");
 const pastPaperProgress =
     document.getElementById("pastPaperProgress");
+const ragPastPaperSyncStatus =
+    document.getElementById("ragPastPaperSyncStatus");
 const readinessScore =
     document.getElementById("readinessScore");
 const readinessNote =
@@ -4890,10 +4843,6 @@ function renderOwnerPaperPanel() {
         "show",
         Boolean(ownerAccessCode)
     );
-
-    if (ownerAccessCode) {
-        loadExistingRagPaperDocuments();
-    }
 }
 
 
@@ -5083,6 +5032,20 @@ async function loadTestCatalog(
         return;
     }
 
+    if (
+        ownerAccessCode &&
+        allowLegacyImport
+    ) {
+        bankPaperCount.textContent = "…";
+        bankQuestionCount.textContent = "…";
+        bankEligibleCount.textContent = "…";
+        bankRepeatedCount.textContent = "…";
+
+        await importExistingPastPapers(
+            true
+        );
+    }
+
     try {
         const response =
             await fetch(
@@ -5143,16 +5106,28 @@ async function loadTestCatalog(
         renderReadinessDashboard();
 
         if (
-            ownerAccessCode &&
-            allowLegacyImport &&
-            !legacyPastPaperImportAttempted
+            ragPastPaperSyncStatus &&
+            ownerAccessCode
         ) {
-            legacyPastPaperImportAttempted =
-                true;
+            const ragCount =
+                Number(
+                    testCatalog.rag_past_paper_count ||
+                    0
+                );
 
-            await importExistingPastPapers(
-                true
-            );
+            ragPastPaperSyncStatus.textContent =
+                ragCount > 0
+                    ? (
+                        "RAG Past Papers detected: " +
+                        ragCount +
+                        ". Test Mode bank is " +
+                        (
+                            testCatalog.rag_sync_complete
+                                ? "synchronized."
+                                : "still synchronizing."
+                        )
+                    )
+                    : "No RAG documents are currently categorized as Past Papers.";
         }
 
     } catch (error) {
@@ -5173,236 +5148,6 @@ async function loadTestCatalog(
 /* =========================================================
    EXISTING RAG PAPER PICKER
 ========================================================= */
-
-async function loadExistingRagPaperDocuments() {
-    if (!ownerAccessCode) {
-        return;
-    }
-
-    existingRagPaperSelect.innerHTML =
-        '<option value="">Loading RAG documents…</option>';
-
-    try {
-        const response =
-            await fetch(
-                PAST_PAPER_RAG_DOCUMENTS_API,
-                {
-                    headers:
-                        betaHeaders(false),
-                    cache:
-                        "no-store"
-                }
-            );
-
-        if (!response.ok) {
-            throw new Error(
-                "Dentora could not read the existing RAG document list."
-            );
-        }
-
-        const data =
-            await response.json();
-
-        const documents =
-            Array.isArray(data.documents)
-                ? data.documents
-                : [];
-
-        existingRagPaperSelect.innerHTML =
-            '<option value="">Select an indexed PDF…</option>';
-
-        documents.forEach(
-            item => {
-                const option =
-                    window.document.createElement(
-                        "option"
-                    );
-
-                option.value =
-                    item.doc_id;
-
-                option.dataset.category =
-                    item.category || "";
-
-                option.dataset.title =
-                    item.title || "";
-
-                option.textContent =
-                    (
-                        (
-                            item.already_in_test_bank ||
-                            item.already_imported
-                        )
-                            ? "✓ "
-                            : (
-                                (
-                                    item.likely_past_paper ||
-                                    item.suggested_past_paper
-                                )
-                                    ? "★ "
-                                    : ""
-                            )
-                    ) +
-                    (item.title || item.filename || item.doc_id) +
-                    " [" +
-                    (item.category || "Other") +
-                    "]" +
-                    (
-                        item.pages
-                            ? " · " + item.pages + "p"
-                            : ""
-                    );
-
-                existingRagPaperSelect.appendChild(
-                    option
-                );
-            }
-        );
-
-        if (documents.length === 0) {
-            existingRagPaperSelect.innerHTML =
-                '<option value="">No RAG documents found</option>';
-        }
-
-    } catch (error) {
-        console.error(
-            "RAG document list error:",
-            error
-        );
-
-        existingRagPaperSelect.innerHTML =
-            '<option value="">Could not load RAG documents</option>';
-
-        showToast(
-            error.message ||
-            "Could not load existing RAG documents.",
-            "error"
-        );
-    }
-}
-
-
-async function importSelectedRagPaper() {
-    const docId =
-        existingRagPaperSelect.value;
-
-    if (!ownerAccessCode) {
-        showToast(
-            "Owner access is required.",
-            "error"
-        );
-        return;
-    }
-
-    if (!docId) {
-        showToast(
-            "Choose the Operative or Orthodontic paper from your RAG library first.",
-            "error"
-        );
-        return;
-    }
-
-    importSelectedRagPaperButton.disabled =
-        true;
-
-    pastPaperProgress.textContent =
-        "Using the selected RAG document — reconstructing its pages and structuring questions…";
-
-    try {
-        const response =
-            await fetch(
-                PAST_PAPER_IMPORT_RAG_API +
-                "/" +
-                encodeURIComponent(docId),
-                {
-                    method: "POST",
-                    headers:
-                        betaHeaders(true),
-                    body:
-                        JSON.stringify({
-                            subject:
-                                pastPaperSubject.value.trim() ||
-                                null,
-                            year:
-                                pastPaperYear.value.trim() ||
-                                null,
-                            title:
-                                pastPaperTitle.value.trim() ||
-                                null
-                        })
-                }
-            );
-
-        if (!response.ok) {
-            let detail =
-                "The selected RAG paper could not be imported.";
-
-            try {
-                const errorData =
-                    await response.json();
-
-                if (
-                    errorData &&
-                    typeof errorData.detail === "string"
-                ) {
-                    detail =
-                        errorData.detail;
-                }
-            } catch (_) {}
-
-            throw new Error(detail);
-        }
-
-        const data =
-            await response.json();
-
-        pastPaperProgress.textContent =
-            "Structured " +
-            data.question_count +
-            " questions from " +
-            (data.title || "the selected RAG paper") +
-            ". Cross-checking MCQs against your indexed Books…";
-
-        await crossCheckImportedPaper(
-            data,
-            data.title || "selected RAG paper"
-        );
-
-        pastPaperProgress.textContent =
-            "Done — " +
-            data.question_count +
-            " structured questions were added from " +
-            (data.title || "the selected RAG paper") +
-            ".";
-
-        showToast(
-            "RAG past paper added to Test Mode."
-        );
-
-        await loadTestCatalog(false);
-        await loadExistingRagPaperDocuments();
-
-    } catch (error) {
-        console.error(
-            "Selected RAG paper import error:",
-            error
-        );
-
-        pastPaperProgress.textContent =
-            error.message ||
-            "Selected RAG paper import failed.";
-
-        showToast(
-            pastPaperProgress.textContent,
-            "error"
-        );
-
-    } finally {
-        importSelectedRagPaperButton.disabled =
-            false;
-    }
-}
-
 
 /* =========================================================
    LEGACY PAST-PAPER MIGRATION
@@ -5483,32 +5228,28 @@ async function crossCheckImportedPaper(
 
 
 async function importExistingPastPapers(
-    automatic = false
+    automatic = true
 ) {
     if (
         !ownerAccessCode ||
         legacyPastPaperImportRunning
     ) {
-        return;
+        return 0;
     }
 
-    legacyPastPaperImportRunning =
-        true;
+    legacyPastPaperImportRunning = true;
 
-    importExistingPastPapersButton.disabled =
-        true;
-
-    pastPaperProgress.textContent =
-        automatic
-            ? "Checking your existing RAG library for previously uploaded past papers…"
-            : "Importing previously indexed past papers into Test Mode…";
+    if (ragPastPaperSyncStatus) {
+        ragPastPaperSyncStatus.textContent =
+            "Synchronizing RAG Past Papers with the Test Mode question bank…";
+    }
 
     let importedCount = 0;
 
     try {
         for (
             let pass = 0;
-            pass < 12;
+            pass < 20;
             pass += 1
         ) {
             const response =
@@ -5523,7 +5264,7 @@ async function importExistingPastPapers(
 
             if (!response.ok) {
                 let detail =
-                    "Existing past-paper import failed.";
+                    "Automatic Past Paper synchronization failed.";
 
                 try {
                     const errorData =
@@ -5559,12 +5300,12 @@ async function importExistingPastPapers(
                     importedCount
                 );
 
-            pastPaperProgress.textContent =
-                "Imported " +
-                paperLabel +
-                " with " +
-                data.question_count +
-                " structured questions. Cross-checking…";
+            if (ragPastPaperSyncStatus) {
+                ragPastPaperSyncStatus.textContent =
+                    "Structured " +
+                    paperLabel +
+                    ". Cross-checking its MCQs against indexed Books…";
+            }
 
             await crossCheckImportedPaper(
                 data,
@@ -5572,68 +5313,49 @@ async function importExistingPastPapers(
             );
         }
 
-        if (importedCount > 0) {
-            pastPaperProgress.textContent =
-                "Imported and cross-checked " +
-                importedCount +
-                " existing past paper" +
-                (
-                    importedCount === 1
-                        ? ""
-                        : "s"
-                ) +
-                ". Test Mode is refreshing…";
-
-            showToast(
-                importedCount +
-                " existing past paper" +
-                (
-                    importedCount === 1
-                        ? ""
-                        : "s"
-                ) +
-                " added to the question bank."
-            );
-
-            await loadTestCatalog(
-                false
-            );
-        } else {
-            pastPaperProgress.textContent =
-                (
-                    testCatalog &&
-                    Number(
-                        testCatalog.question_count ||
-                        0
-                    ) > 0
-                )
-                    ? "Existing indexed past papers are already synchronized with Test Mode."
-                    : "No additional indexed Past Papers were detected. If a paper was indexed under another category, use the Test Mode uploader once to classify it correctly.";
+        if (ragPastPaperSyncStatus) {
+            ragPastPaperSyncStatus.textContent =
+                importedCount > 0
+                    ? (
+                        "Automatic RAG sync complete — " +
+                        importedCount +
+                        " new past paper" +
+                        (
+                            importedCount === 1
+                                ? ""
+                                : "s"
+                        ) +
+                        " added to the bank."
+                    )
+                    : "RAG Past Papers and Test Mode are synchronized.";
         }
+
+        return importedCount;
 
     } catch (error) {
         console.error(
-            "Existing past-paper migration error:",
+            "Automatic Past Paper synchronization error:",
             error
         );
 
-        pastPaperProgress.textContent =
-            error.message ||
-            "Existing past-paper import failed.";
+        if (ragPastPaperSyncStatus) {
+            ragPastPaperSyncStatus.textContent =
+                error.message ||
+                "Automatic Past Paper synchronization failed.";
+        }
 
         if (!automatic) {
             showToast(
-                pastPaperProgress.textContent,
+                error.message ||
+                "Automatic Past Paper synchronization failed.",
                 "error"
             );
         }
 
-    } finally {
-        legacyPastPaperImportRunning =
-            false;
+        return 0;
 
-        importExistingPastPapersButton.disabled =
-            false;
+    } finally {
+        legacyPastPaperImportRunning = false;
     }
 }
 
@@ -8384,31 +8106,6 @@ refreshTestBankButton.addEventListener(
 ingestPastPaperButton.addEventListener(
     "click",
     ingestPastPaper
-);
-
-
-importExistingPastPapersButton.addEventListener(
-    "click",
-    function() {
-        legacyPastPaperImportAttempted =
-            true;
-
-        importExistingPastPapers(
-            false
-        );
-    }
-);
-
-
-importSelectedRagPaperButton.addEventListener(
-    "click",
-    importSelectedRagPaper
-);
-
-
-reloadRagPaperListButton.addEventListener(
-    "click",
-    loadExistingRagPaperDocuments
 );
 
 

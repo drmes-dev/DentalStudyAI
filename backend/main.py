@@ -1144,7 +1144,7 @@ STRICT RULES
 def root():
     return {
         "message": "Dentora backend is running.",
-        "version": "2.3.2-direct-rag-paper-import",
+        "version": "2.3.3-auto-rag-past-paper-sync",
     }
 
 
@@ -2216,9 +2216,9 @@ def import_existing_past_paper(
     fallback_candidates = []
 
     cue_pattern = re.compile(
-        r"(past\s*paper|question\s*paper|annual\s*(exam|examination)|"
+        r"(past\s*paper|pastpaper|question\s*paper|annual\s*(exam|examination)|"
         r"supply\s*(exam|examination)|professional\s*(exam|examination)|"
-        r"university\s*(exam|examination))",
+        r"university\s*(exam|examination)|previous\s*year|previous\s*paper)",
         re.IGNORECASE,
     )
 
@@ -2236,22 +2236,32 @@ def import_existing_past_paper(
         ):
             continue
 
-        category = str(
+        raw_category = str(
             document.get(
                 "category",
                 "",
             )
-        ).strip().lower()
+        ).strip()
+
+        category_words = set(
+            re.findall(
+                r"[a-z]+",
+                raw_category.lower(),
+            )
+        )
 
         name_text = (
             f"{document.get('filename', '')} "
             f"{document.get('title', '')}"
         )
 
-        if category in {
-            "past papers",
-            "past paper",
-        }:
+        # Anything deliberately indexed as a Past Paper is automatically
+        # synchronized into Test Mode. The owner should never have to select
+        # the same PDF a second time.
+        if (
+            "past" in category_words
+            and "paper" in category_words
+        ):
             strong_candidates.append(
                 document
             )
@@ -2398,7 +2408,47 @@ def test_catalog(
             "papers": [],
         }
 
-    return past_paper_store.catalog()
+    catalog = past_paper_store.catalog()
+
+    try:
+        rag_documents = rag_store.list_documents()
+        rag_past_paper_count = 0
+
+        for document in rag_documents:
+            category_words = set(
+                re.findall(
+                    r"[a-z]+",
+                    str(
+                        document.get(
+                            "category",
+                            "",
+                        )
+                    ).lower(),
+                )
+            )
+
+            if (
+                "past" in category_words
+                and "paper" in category_words
+            ):
+                rag_past_paper_count += 1
+
+        catalog["rag_past_paper_count"] = (
+            rag_past_paper_count
+        )
+        catalog["rag_sync_complete"] = (
+            catalog.get("paper_count", 0)
+            >= rag_past_paper_count
+        )
+    except Exception as exc:
+        print(
+            "Test catalog RAG sync status warning:",
+            exc,
+        )
+        catalog["rag_past_paper_count"] = 0
+        catalog["rag_sync_complete"] = False
+
+    return catalog
 
 
 @app.post("/test/start")
