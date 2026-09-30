@@ -6,6 +6,7 @@ from collections import Counter
 from typing import Any, Dict, List, Optional
 
 from rag import EMBED_DIMENSION, _fetch_vectors, _metadata, now_iso, normalize_text, rag_store
+from read_cache import ReadCache, cached_read, invalidates_reads
 
 
 TEST_NS = os.getenv("PINECONE_TEST_NAMESPACE", "past_papers").strip()
@@ -59,6 +60,9 @@ def _question_text(question: Dict[str, Any]) -> str:
 
 
 class PastPaperStore:
+    def __init__(self):
+        self._read_cache = ReadCache(max_bytes=16 * 1024 * 1024)
+
     @property
     def configured(self) -> bool:
         return rag_store.configured
@@ -75,6 +79,7 @@ class PastPaperStore:
     def _question_vector_id(self, paper_id: str, question_id: str) -> str:
         return f"ppq#{paper_id}#{question_id}"
 
+    @invalidates_reads
     def _delete_prefix(self, namespace: str, prefix: str):
         index = self._index()
         ids = rag_store._list_ids(namespace, prefix)
@@ -84,6 +89,7 @@ class PastPaperStore:
                 index.delete(ids=batch, namespace=namespace)
         return len(ids)
 
+    @invalidates_reads
     def index_paper(
         self,
         *,
@@ -314,6 +320,7 @@ class PastPaperStore:
             "stem_hash": metadata.get("stem_hash", ""),
         }
 
+    @cached_read(ttl=60)
     def list_questions(
         self,
         *,
@@ -439,6 +446,7 @@ class PastPaperStore:
             )
         ]
 
+    @invalidates_reads
     def update_verification(
         self,
         question_id: str,
@@ -506,6 +514,7 @@ class PastPaperStore:
             namespace=TEST_NS,
         )
 
+    @invalidates_reads
     def refresh_manifest_counts(self, paper_id: str) -> Dict[str, int]:
         index = self._index()
         questions = self.list_questions(paper_id=paper_id)
@@ -554,6 +563,7 @@ class PastPaperStore:
             "pending_count": counts.get("pending", 0),
         }
 
+    @cached_read(ttl=30)
     def list_papers(self) -> List[Dict[str, Any]]:
         index = self._index()
         ids = rag_store._list_ids(

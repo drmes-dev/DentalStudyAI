@@ -1432,7 +1432,7 @@ OCR is too damaged or the item is genuinely ambiguous, return an empty answer.
 def root():
     return {
         "message": "Dentora backend is running.",
-        "version": "2.4.3-background-question-bank",
+        "version": "2.4.4-reduced-pinecone-egress",
     }
 
 

@@ -6,6 +6,11 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 try:
+    from .read_cache import ReadCache, cached_read, invalidates_reads
+except ImportError:
+    from read_cache import ReadCache, cached_read, invalidates_reads
+
+try:
     from pinecone import Pinecone, ServerlessSpec
 except Exception:
     Pinecone = None
@@ -253,6 +258,7 @@ class RagStore:
     def __init__(self):
         self.pc = None
         self.index = None
+        self._read_cache = ReadCache()
 
     @property
     def configured(self) -> bool:
@@ -399,6 +405,7 @@ class RagStore:
         # Preserve order and avoid duplicate IDs across SDK pagination.
         return list(dict.fromkeys(ids))
 
+    @invalidates_reads
     def index_pages(
         self,
         *,
@@ -605,6 +612,7 @@ class RagStore:
 
         return selected
 
+    @cached_read(ttl=30)
     def list_documents(self) -> List[Dict[str, Any]]:
         index = self.connect()
         if index is None:
@@ -725,6 +733,7 @@ class RagStore:
         ]
 
 
+    @cached_read(ttl=None)
     def document_pages(self, doc_id: str) -> List[Dict[str, Any]]:
         """Reconstruct readable page text from an already indexed RAG document.
 
@@ -818,6 +827,7 @@ class RagStore:
         ]
 
 
+    @invalidates_reads
     def delete_document(self, doc_id: str, require_present: bool = True) -> Dict[str, Any]:
         index = self.connect()
         if index is None:
