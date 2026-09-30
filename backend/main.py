@@ -288,6 +288,107 @@ def generate_with_fallback(prompt: str) -> Dict[str, str]:
     }
 
 
+
+def is_strict_source_request(message: str, mode: str = "") -> bool:
+    """Return True when the student explicitly wants a source-bound answer."""
+    text = re.sub(r"\s+", " ", str(message or "").lower()).strip()
+    mode_key = str(mode or "").strip().lower()
+
+    if mode_key in {"pdf tutor", "pdf", "source tutor"}:
+        return True
+
+    cues = (
+        "according to the uploaded",
+        "according to uploaded",
+        "according to the textbook",
+        "according to this textbook",
+        "uploaded textbook",
+        "uploaded book",
+        "uploaded resource",
+        "uploaded resources",
+        "provided textbook",
+        "provided book",
+        "from the uploaded",
+        "from this book",
+        "from this textbook",
+        "textbook page reference",
+        "textbook page references",
+        "pdf page reference",
+        "pdf page references",
+        "do not use information from",
+        "do not use outside",
+        "only use the uploaded",
+        "use only the uploaded",
+    )
+    return any(cue in text for cue in cues)
+
+
+def verify_source_grounding(
+    *,
+    question: str,
+    draft: str,
+    knowledge_context: str,
+) -> Dict[str, str]:
+    """Second-pass rewrite for strict source-bound questions.
+
+    The verifier is deliberately conservative: unsupported useful background
+    should be removed rather than blended into textbook evidence.
+    """
+    prompt = f"""
+You are Dentora's grounding verifier.
+
+TASK
+----
+Rewrite the draft answer so it is strictly faithful to the retrieved source
+excerpts. Return ONLY the corrected answer.
+
+STUDENT QUESTION
+----------------
+{question}
+
+RETRIEVED SOURCE EXCERPTS
+-------------------------
+{knowledge_context}
+
+DRAFT ANSWER TO VERIFY
+----------------------
+{draft}
+
+STRICT VERIFICATION RULES
+-------------------------
+1. Keep a factual claim only if it is directly supported by the retrieved
+   excerpt cited for that claim.
+2. Do not add general dental knowledge, even if it is correct, unless the
+   student's question explicitly asks for outside/background knowledge.
+3. Do not infer composition, mechanism, clinical effects, percentages,
+   chemical actions, recommendations, or protocol variants beyond what the
+   excerpts explicitly state.
+4. A figure showing that a sequence worked supports "the figure shows/reports
+   successful removal with that sequence"; it does not automatically prove
+   that the sequence is universally recommended or superior.
+5. A passage saying particles are "primarily inorganic" does not by itself
+   support exact percentages, hydroxyapatite composition, or a description
+   of the organic fraction.
+6. If a requested point is not directly supported, say:
+   "This is not clearly covered in the retrieved textbook excerpts."
+7. Preserve valid [S1], [S2], etc. citations. Never invent a source label,
+   page number, quotation, or reference.
+8. Do not attach a citation to a claim that the cited excerpt does not support.
+9. Only use quotation marks for wording that appears verbatim in the supplied
+   excerpt. Otherwise paraphrase without quotation marks.
+10. Review questions, MCQ options, distractors, and true/false statements are
+    not factual evidence unless the supplied excerpt clearly establishes their
+    correctness.
+11. Keep the answer useful for a final-year BDS student, but evidence fidelity
+    is more important than completeness.
+12. Before returning the answer, inspect every sentence and table row for
+    unsupported details and remove or narrow them.
+
+Return the corrected answer only.
+"""
+    return generate_with_fallback(prompt)
+
+
 # =========================================================
 # HEALTH
 # =========================================================
@@ -540,6 +641,7 @@ def chat(request: ChatRequest):
     message = request.message.strip()
     mode_key = request.mode.strip().lower()
     exclude_assessment = mode_key not in {"mcq", "mcq mode", "quiz"}
+    strict_source = is_strict_source_request(message, request.mode)
 
     if not message:
         raise HTTPException(status_code=400, detail="Message cannot be empty.")
@@ -724,6 +826,27 @@ Answer now.
 """
 
     generated = generate_with_fallback(prompt)
+
+    if (
+        strict_source
+        and rag_used
+        and generated.get("provider") != "Error"
+        and generated.get("response")
+    ):
+        verified = verify_source_grounding(
+            question=message,
+            draft=generated["response"],
+            knowledge_context=knowledge_context,
+        )
+        if verified.get("provider") != "Error" and verified.get("response"):
+            generated["response"] = verified["response"]
+            generated["grounding_verified"] = True
+            generated["verification_provider"] = verified.get("provider", "")
+        else:
+            generated["grounding_verified"] = False
+    else:
+        generated["grounding_verified"] = False
+
     generated["rag_used"] = rag_used
     generated["rag_configured"] = rag_store.configured
     generated["sources"] = public_sources(retrieved_sources)
