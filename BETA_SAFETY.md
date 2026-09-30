@@ -13,6 +13,9 @@
 - Temporary PDF session content expires automatically and can be explicitly removed.
 - Raw persistent RAG library/search endpoints require `X-Dentora-Admin-Key`.
 - Persistent ingestion and deletion remain admin-protected.
+- Structured past-paper ingestion is owner-only; student beta users can take tests but cannot add permanent papers.
+- Test answers are hidden until submission, and automatic grading uses cross-checked question-bank answers only.
+- Personal Test Mode history and readiness metrics are stored in the user's browser, not presented as a cohort percentile.
 
 ## Environment variables
 
