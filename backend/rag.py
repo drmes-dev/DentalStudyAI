@@ -627,6 +627,99 @@ class RagStore:
         documents.sort(key=lambda item: item.get("indexed_at", ""), reverse=True)
         return documents
 
+    def document_pages(self, doc_id: str) -> List[Dict[str, Any]]:
+        """Reconstruct readable page text from an already indexed RAG document.
+
+        This is used to migrate older Past Papers into the structured Test Mode
+        bank without asking the owner to upload the same PDF again.
+        """
+        index = self.connect()
+        if index is None:
+            return []
+
+        ids = self._list_ids(
+            KNOWLEDGE_NS,
+            f"doc#{doc_id}#",
+        )
+
+        chunks: List[Dict[str, Any]] = []
+
+        for start in range(0, len(ids), 100):
+            batch = ids[start:start + 100]
+            if not batch:
+                continue
+
+            fetched = index.fetch(
+                ids=batch,
+                namespace=KNOWLEDGE_NS,
+            )
+
+            for vector in _fetch_vectors(fetched).values():
+                metadata = _metadata(vector)
+
+                if metadata.get("record_type") != "chunk":
+                    continue
+
+                chunks.append({
+                    "page": int(metadata.get("page", 0) or 0),
+                    "chunk_index": int(
+                        metadata.get("chunk_index", 0)
+                        or 0
+                    ),
+                    "text": normalize_text(
+                        metadata.get("text", "")
+                    ),
+                })
+
+        chunks.sort(
+            key=lambda item: (
+                item["page"],
+                item["chunk_index"],
+            )
+        )
+
+        pages: Dict[int, str] = {}
+
+        def merge_overlap(existing: str, incoming: str) -> str:
+            if not existing:
+                return incoming
+            if not incoming:
+                return existing
+
+            max_overlap = min(
+                CHUNK_OVERLAP + 120,
+                len(existing),
+                len(incoming),
+            )
+
+            overlap = 0
+            for size in range(max_overlap, 39, -1):
+                if existing[-size:] == incoming[:size]:
+                    overlap = size
+                    break
+
+            if overlap:
+                return existing + incoming[overlap:]
+
+            return existing + "\n" + incoming
+
+        for chunk in chunks:
+            page = chunk["page"]
+            pages[page] = merge_overlap(
+                pages.get(page, ""),
+                chunk["text"],
+            )
+
+        return [
+            {
+                "page": page,
+                "text": normalize_text(text),
+            }
+            for page, text in sorted(pages.items())
+            if normalize_text(text)
+        ]
+
+
     def delete_document(self, doc_id: str, require_present: bool = True) -> Dict[str, Any]:
         index = self.connect()
         if index is None:
