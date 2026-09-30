@@ -176,12 +176,20 @@ if (-not $SkipInstall) {
 }
 
 $envFile = Join-Path $repo ".env"
-$key = Get-DotEnvValue -Path $envFile -Name "PINECONE_API_KEY"
 
-if (-not $key) {
+$hasPineconeKey = $false
+if (Test-Path $envFile) {
+    $hasPineconeKey = Select-String -LiteralPath $envFile -Pattern '^\s*PINECONE_API_KEY\s*=\s*\S+' -Quiet
+}
+
+if ($hasPineconeKey) {
+    Write-Step "Existing Pinecone key found in local .env"
+    Write-Host "Reusing it automatically. No key entry is needed." -ForegroundColor Green
+}
+else {
     Write-Step "Connecting this PC to your Pinecone project"
-    Write-Host "Paste your Pinecone API key into the hidden prompt." -ForegroundColor Yellow
-    Write-Host "It will be saved only in your local .env file, which Git ignores." -ForegroundColor DarkGray
+    Write-Host "No usable Pinecone key was found in the local .env file." -ForegroundColor Yellow
+    Write-Host "Paste it once into the hidden prompt; it stays only on this PC." -ForegroundColor DarkGray
 
     $key = Read-SecretPlainText -Prompt "Pinecone API key"
 
