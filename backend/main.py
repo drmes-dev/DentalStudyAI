@@ -608,20 +608,37 @@ def chat(request: ChatRequest):
         knowledge_rules = """
 DENTORA KNOWLEDGE-BASE RULES
 ----------------------------
-The source excerpts below are the primary authority for this answer.
+The raw PDF excerpts below are evidence candidates, NOT pre-verified facts.
 
-1. Base claims primarily on the retrieved source excerpts.
-2. Preserve the source terminology, classifications, sequence, and distinctions.
-3. Cite source-backed statements using the exact labels [S1], [S2], etc.
-4. Never invent a source label, page number, quotation, or fact.
-5. If the retrieved material does not clearly support the requested point, explicitly say:
+1. Answer from explanatory textbook prose, supported tables, and figure captions.
+2. WARNING: textbook review questions, MCQ options, true/false statements,
+   mock answers, and distractors may be present in extracted page text.
+   NEVER repeat an answer option as a factual textbook claim just because
+   that option appears in a retrieved passage. Use it as evidence only when
+   the answer key or accompanying explanatory prose establishes its validity.
+   If uncertain, do not use the option as evidence.
+3. Distinguish what the textbook says, what a question merely asks, and
+   what you independently infer. Do not present an inference as a quotation.
+4. Cite each claim with its corresponding [S1], [S2], etc. label. Use only
+   the exact source label and PDF page number printed beside that excerpt.
+   PDF page numbers and the textbook printed page can differ. Never invent
+   or transplant page numbers between sources.
+5. If the student asks for one named textbook, author, or excludes a book,
+   respect that restriction EVEN IF excerpts from other books were retrieved.
+   Do not cite or rely on an excluded book.
+6. Only put text inside quotation marks if it is verbatim in the excerpt.
+   Otherwise clearly paraphrase it, with a citation if supported.
+7. Before answering, check whether each substantive sourced claim follows
+   from explanatory evidence rather than a question, distractor, or heading.
+8. If the excerpts do not clearly support a requested point, explicitly say:
    "This is not clearly covered in your uploaded resources."
-6. Only after that statement may you provide established supplementary BDS-level knowledge.
-7. Put supplementary material under:
+   Do not use an unrelated passage to justify a missing answer.
+9. Only after clearly identifying the gap may you provide established
+   supplementary BDS-level knowledge under:
    "Additional background knowledge — not directly from your uploaded resources."
-8. Never present supplementary knowledge as if it came from the student's library.
-9. If sources disagree, state the difference instead of silently reconciling them.
-10. Use well-formed Markdown tables when a table improves clarity.
+   Never attach an uploaded-source citation to supplementary knowledge.
+10. If sources disagree, identify the difference rather than silently
+    reconciling them. Use well-formed Markdown tables when helpful.
 """
     else:
         knowledge_rules = """
