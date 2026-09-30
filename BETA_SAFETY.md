@@ -9,6 +9,7 @@
 - Chat, PDF Tutor, and feedback endpoints accept either the private owner code or the invited-student beta code.
 - Owner access is remembered only in the owner's browser local storage; tester access remains session-only.
 - Temporary PDF uploads are capped by file size and page count.
+- Voice recordings are capped, rate-limited, transcribed through Groq speech-to-text, and are not intentionally persisted by Dentora as files.
 - Temporary PDF session content expires automatically and can be explicitly removed.
 - Raw persistent RAG library/search endpoints require `X-Dentora-Admin-Key`.
 - Persistent ingestion and deletion remain admin-protected.
@@ -35,6 +36,9 @@ CHAT_RATE_LIMIT=30
 CHAT_RATE_WINDOW_SECONDS=600
 PDF_RATE_LIMIT=3
 PDF_RATE_WINDOW_SECONDS=3600
+MAX_VOICE_AUDIO_MB=12
+VOICE_RATE_LIMIT=20
+VOICE_RATE_WINDOW_SECONDS=3600
 ```
 
 The in-memory limiter is appropriate for an early single-instance beta. Before a paid or multi-instance production release, replace it with an account-aware/distributed quota system (for example Redis-backed limiting) and add real authentication.

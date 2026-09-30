@@ -32,13 +32,14 @@ jobs:
           PINECONE_API_KEY: ""
           DENTORA_ADMIN_KEY: test-admin-key
           DENTORA_BETA_ACCESS_CODE: test-beta-key
+          DENTORA_OWNER_ACCESS_CODE: test-owner-key
         run: |
           cd backend
           python - <<'PY'
           import main
           assert main.app is not None
           routes = {getattr(route, "path", None) for route in main.app.routes}
-          required = {"/", "/health", "/beta/verify", "/chat", "/upload-pdf", "/feedback"}
+          required = {"/", "/health", "/beta/verify", "/chat", "/upload-pdf", "/transcribe", "/feedback"}
           missing = required - routes
           if missing:
               raise SystemExit(f"Missing routes: {sorted(missing)}")

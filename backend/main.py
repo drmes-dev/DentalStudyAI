@@ -52,6 +52,9 @@ CHAT_RATE_LIMIT = int(os.getenv("CHAT_RATE_LIMIT", "30"))
 CHAT_RATE_WINDOW_SECONDS = int(os.getenv("CHAT_RATE_WINDOW_SECONDS", "600"))
 PDF_RATE_LIMIT = int(os.getenv("PDF_RATE_LIMIT", "3"))
 PDF_RATE_WINDOW_SECONDS = int(os.getenv("PDF_RATE_WINDOW_SECONDS", "3600"))
+MAX_VOICE_AUDIO_MB = int(os.getenv("MAX_VOICE_AUDIO_MB", "12"))
+VOICE_RATE_LIMIT = int(os.getenv("VOICE_RATE_LIMIT", "20"))
+VOICE_RATE_WINDOW_SECONDS = int(os.getenv("VOICE_RATE_WINDOW_SECONDS", "3600"))
 
 _default_origins = (
     "https://drmes-dev.github.io,"
@@ -535,7 +538,7 @@ Return the corrected answer only.
 def root():
     return {
         "message": "Dentora backend is running.",
-        "version": "2.1.0-beta-safety",
+        "version": "2.2.0-voice-beta",
     }
 
 
@@ -545,6 +548,7 @@ def health():
         "ok": True,
         "service": "Dentora API",
         "rag_configured": rag_store.configured,
+        "voice_configured": bool(os.getenv("GROQ_API_KEY")),
         "beta_access_required": True,
         "beta_access_configured": bool(DENTORA_BETA_ACCESS_CODE),
         "owner_access_configured": bool(DENTORA_OWNER_ACCESS_CODE),
@@ -880,6 +884,112 @@ def rag_delete_document(
         raise HTTPException(status_code=404, detail="Document not found.")
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
+
+
+# =========================================================
+# VOICE TRANSCRIPTION
+# =========================================================
+
+@app.post("/transcribe")
+async def transcribe_voice(
+    request: Request,
+    file: UploadFile = File(...),
+    x_dentora_beta_key: Optional[str] = Header(
+        default=None,
+        alias="X-Dentora-Beta-Key",
+    ),
+):
+    require_beta_access(x_dentora_beta_key)
+
+    enforce_rate_limit(
+        request,
+        "voice-transcribe",
+        VOICE_RATE_LIMIT,
+        VOICE_RATE_WINDOW_SECONDS,
+    )
+
+    if not os.getenv("GROQ_API_KEY"):
+        raise HTTPException(
+            status_code=503,
+            detail="Voice transcription is not configured on the server.",
+        )
+
+    filename = (file.filename or "voice.webm")[:180]
+    content_type = (file.content_type or "application/octet-stream").lower()
+    allowed_extensions = (
+        ".flac", ".mp3", ".mp4", ".mpeg", ".mpga",
+        ".m4a", ".ogg", ".wav", ".webm",
+    )
+
+    if (
+        not content_type.startswith("audio/")
+        and not filename.lower().endswith(allowed_extensions)
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="Please send a supported audio recording.",
+        )
+
+    max_bytes = MAX_VOICE_AUDIO_MB * 1024 * 1024
+    contents = await file.read(max_bytes + 1)
+
+    if not contents:
+        raise HTTPException(
+            status_code=400,
+            detail="The audio recording was empty.",
+        )
+
+    if len(contents) > max_bytes:
+        raise HTTPException(
+            status_code=413,
+            detail=(
+                f"Voice recordings are limited to {MAX_VOICE_AUDIO_MB} MB. "
+                "Please record a shorter question."
+            ),
+        )
+
+    try:
+        transcription = groq_client.audio.transcriptions.create(
+            file=(filename, contents, content_type),
+            model="whisper-large-v3-turbo",
+            response_format="json",
+            temperature=0.0,
+            prompt=(
+                "BDS dental education and viva terminology. Preserve dental, "
+                "medical, pharmacology, anatomy, orthodontic, endodontic, "
+                "oral-surgery and operative-dentistry terms and abbreviations."
+            ),
+        )
+
+        transcript = str(getattr(transcription, "text", "") or "").strip()
+
+        if not transcript:
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    "Dentora could not detect clear speech. "
+                    "Please try again closer to the microphone."
+                ),
+            )
+
+        return {
+            "success": True,
+            "transcript": transcript,
+            "provider": "Groq Whisper",
+            "model": "whisper-large-v3-turbo",
+        }
+
+    except HTTPException:
+        raise
+    except Exception as exc:
+        print("Voice transcription error:", exc)
+        raise HTTPException(
+            status_code=502,
+            detail=(
+                "Voice transcription is temporarily unavailable. "
+                "Please type your question or try again."
+            ),
+        ) from exc
 
 
 # =========================================================

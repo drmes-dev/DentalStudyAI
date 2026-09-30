@@ -26,6 +26,8 @@ footer{margin-top:26px;color:#687f96;font-size:12px}
 <p>Recent chats and a random browser session identifier are stored in your browser's local storage. They are not currently synced to a Dentora account. Clearing browser data or using another device may remove access to that local history.</p>
 <h2>What the backend processes</h2>
 <p>When you ask a question, the prompt is sent to the Dentora backend. Relevant textbook or uploaded-PDF excerpts may be included in a model request so that Dentora can generate a source-aware answer.</p>
+<h2>Voice questions</h2>
+<p>If you use the microphone feature, the recorded audio clip is sent to the Dentora backend and forwarded to the configured speech-to-text provider for transcription. Dentora does not intentionally save the raw voice clip as a permanent file. The resulting transcript is then handled like a typed study prompt. Provider-side operational logs may be governed by that provider&#39;s own policies.</p>
 <h2>Temporary PDF Tutor uploads</h2>
 <p>PDF Tutor uploads are processed for the current browser session. The original temporary PDF is not intentionally stored as a permanent file by Dentora. Extracted temporary session content is held in server memory and is automatically expired after a limited period; using the Remove PDF control also asks the backend to clear that session copy.</p>
 <h2>AI and infrastructure providers</h2>
