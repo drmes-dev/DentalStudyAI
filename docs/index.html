@@ -20,6 +20,8 @@
 
 <style>
 
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@500;600;700;800&family=Rajdhani:wght@400;500;600;700&display=swap');
+
 :root {
     --bg: #07111f;
     --bg2: #0b1728;
@@ -2904,6 +2906,697 @@ a.source-card:hover {
         animation-iteration-count: 1 !important;
         transition-duration: .01ms !important;
         scroll-behavior: auto !important;
+    }
+}
+
+
+
+/* DENTORA FUTURISTIC UI ENHANCEMENT v1
+   Visual layer only: no IDs, HTML structure, data flow, API calls, or JS behavior changed.
+================================================================= */
+
+:root {
+    --neon-cyan: #74f2ff;
+    --neon-blue: #67b8ff;
+    --neon-violet: #9a91ff;
+    --tech-line: rgba(116,242,255,.075);
+}
+
+html,
+body,
+button,
+input,
+select,
+textarea {
+    font-family:
+        "Rajdhani",
+        Inter,
+        ui-sans-serif,
+        system-ui,
+        -apple-system,
+        BlinkMacSystemFont,
+        "Segoe UI",
+        sans-serif;
+}
+
+body {
+    letter-spacing: .012em;
+}
+
+/* Futuristic display typography while keeping long-form text highly readable */
+.brand-text h1,
+.page-title,
+.welcome h2,
+.test-hero h2,
+.test-panel h3,
+.readiness-value,
+.test-stat-value,
+.test-timer {
+    font-family:
+        "Orbitron",
+        "Rajdhani",
+        sans-serif;
+}
+
+.section-title,
+.hero-kicker,
+.readiness-label,
+.test-stat-label,
+.test-field label,
+.mode-name,
+.new-chat,
+.test-primary,
+.test-secondary {
+    font-family:
+        "Orbitron",
+        "Rajdhani",
+        sans-serif;
+    letter-spacing: .055em;
+}
+
+/* Ambient holographic grid + scanner */
+.background::before {
+    content: "";
+    position: absolute;
+    inset: -30%;
+    background-image:
+        linear-gradient(var(--tech-line) 1px, transparent 1px),
+        linear-gradient(90deg, var(--tech-line) 1px, transparent 1px);
+    background-size: 52px 52px;
+    transform: perspective(700px) rotateX(62deg) translateY(19%);
+    transform-origin: center center;
+    opacity: .26;
+    mask-image: radial-gradient(circle at 50% 54%, #000 0%, transparent 68%);
+    -webkit-mask-image: radial-gradient(circle at 50% 54%, #000 0%, transparent 68%);
+    animation: dentoraGridDrift 24s linear infinite;
+}
+
+.background::after {
+    content: "";
+    position: absolute;
+    left: 8%;
+    right: 8%;
+    height: 1px;
+    top: -4%;
+    background:
+        linear-gradient(
+            90deg,
+            transparent,
+            rgba(116,242,255,.10),
+            rgba(116,242,255,.48),
+            rgba(154,145,255,.35),
+            transparent
+        );
+    box-shadow:
+        0 0 18px rgba(116,242,255,.24),
+        0 0 42px rgba(103,184,255,.10);
+    opacity: .42;
+    animation: dentoraScanline 10s ease-in-out infinite;
+}
+
+@keyframes dentoraGridDrift {
+    from { transform: perspective(700px) rotateX(62deg) translate3d(0,19%,0); }
+    to   { transform: perspective(700px) rotateX(62deg) translate3d(52px,calc(19% + 52px),0); }
+}
+
+@keyframes dentoraScanline {
+    0%, 8%   { transform: translateY(0); opacity: 0; }
+    16%      { opacity: .5; }
+    78%      { opacity: .34; }
+    92%,100% { transform: translateY(112vh); opacity: 0; }
+}
+
+/* Glass edges gain a subtle living light rather than changing layout */
+.sidebar,
+.header,
+.test-hero,
+.test-panel,
+.composer,
+.suggestion,
+.mode,
+.new-chat,
+.readiness-card,
+.test-stat-card {
+    background-size: 180% 180%;
+}
+
+.sidebar {
+    box-shadow:
+        inset -1px 0 0 rgba(116,242,255,.04),
+        18px 0 60px rgba(0,0,0,.10);
+}
+
+.sidebar::after {
+    content: "";
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    left: 288px;
+    width: 1px;
+    pointer-events: none;
+    background:
+        linear-gradient(
+            180deg,
+            transparent 0%,
+            rgba(116,242,255,.26) 22%,
+            rgba(154,145,255,.20) 55%,
+            transparent 100%
+        );
+    filter: drop-shadow(0 0 7px rgba(116,242,255,.20));
+    animation: dentoraEdgePulse 5.5s ease-in-out infinite;
+}
+
+.brand-logo {
+    animation: dentoraBrandPulse 4.2s ease-in-out infinite;
+}
+
+.brand-text h1 {
+    background: linear-gradient(90deg,#effcff 0%,#83efff 52%,#aaa3ff 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    text-shadow: 0 0 24px rgba(103,232,249,.08);
+}
+
+@keyframes dentoraBrandPulse {
+    0%,100% {
+        box-shadow:
+            inset 0 1px 0 rgba(255,255,255,.08),
+            0 10px 28px rgba(0,0,0,.18),
+            0 0 24px rgba(103,232,249,.08);
+    }
+    50% {
+        box-shadow:
+            inset 0 1px 0 rgba(255,255,255,.10),
+            0 12px 30px rgba(0,0,0,.20),
+            0 0 38px rgba(103,232,249,.18),
+            0 0 72px rgba(129,140,248,.08);
+    }
+}
+
+@keyframes dentoraEdgePulse {
+    0%,100% { opacity: .45; }
+    50%     { opacity: .92; }
+}
+
+/* Navigation micro-interactions */
+.mode,
+.new-chat,
+.chat-item,
+.icon-button,
+.attach-button,
+.mic-button,
+.send-button,
+.suggestion,
+.test-primary,
+.test-secondary,
+.test-option {
+    will-change: transform;
+}
+
+.mode:hover,
+.new-chat:hover,
+.suggestion:hover,
+.test-stat-card:hover,
+.readiness-card:hover {
+    transform: translateY(-2px);
+}
+
+.mode.active {
+    animation: dentoraActiveMode 3.8s ease-in-out infinite;
+}
+
+.mode.active .mode-icon {
+    animation: dentoraIconPulse 2.8s ease-in-out infinite;
+}
+
+@keyframes dentoraActiveMode {
+    0%,100% {
+        box-shadow:
+            inset 0 1px 0 rgba(255,255,255,.07),
+            0 8px 26px rgba(0,0,0,.18),
+            0 0 18px rgba(103,232,249,.06);
+    }
+    50% {
+        box-shadow:
+            inset 0 1px 0 rgba(255,255,255,.085),
+            0 10px 30px rgba(0,0,0,.22),
+            0 0 30px rgba(103,232,249,.13),
+            0 0 54px rgba(129,140,248,.055);
+    }
+}
+
+@keyframes dentoraIconPulse {
+    0%,100% { transform: scale(1); filter: brightness(1); }
+    50%     { transform: scale(1.055); filter: brightness(1.14); }
+}
+
+/* Header HUD accent */
+.header::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 8%;
+    width: 22%;
+    height: 1px;
+    pointer-events: none;
+    background: linear-gradient(90deg,transparent,var(--neon-cyan),transparent);
+    opacity: .34;
+    animation: dentoraHeaderSweep 6s ease-in-out infinite;
+}
+
+@keyframes dentoraHeaderSweep {
+    0%,100% { transform: translateX(0); opacity: .15; }
+    50%     { transform: translateX(265%); opacity: .48; }
+}
+
+/* Welcome screen: slightly more holographic without changing content */
+.hero-kicker {
+    box-shadow:
+        inset 0 1px 0 rgba(255,255,255,.04),
+        0 0 26px rgba(103,232,249,.055);
+}
+
+.hero-kicker-dot {
+    animation: dentoraDotPing 2s ease-in-out infinite;
+}
+
+.welcome h2 {
+    text-transform: none;
+    letter-spacing: -.035em;
+}
+
+.suggestion {
+    animation: dentoraSurfaceBreath 8s ease-in-out infinite;
+}
+
+.suggestion:nth-child(2) { animation-delay: -2s; }
+.suggestion:nth-child(3) { animation-delay: -4s; }
+.suggestion:nth-child(4) { animation-delay: -6s; }
+
+@keyframes dentoraDotPing {
+    0%,100% { transform: scale(.9); box-shadow: 0 0 8px rgba(103,232,249,.58); }
+    50%     { transform: scale(1.18); box-shadow: 0 0 18px rgba(103,232,249,.92); }
+}
+
+@keyframes dentoraSurfaceBreath {
+    0%,100% { background-position: 0% 50%; }
+    50%     { background-position: 100% 50%; }
+}
+
+/* Composer feels like an active command bar */
+.composer {
+    overflow: hidden;
+}
+
+.composer::before {
+    content: "";
+    position: absolute;
+    inset: -1px;
+    border-radius: inherit;
+    padding: 1px;
+    pointer-events: none;
+    background:
+        linear-gradient(
+            115deg,
+            transparent 10%,
+            rgba(116,242,255,.18) 35%,
+            rgba(154,145,255,.16) 55%,
+            transparent 82%
+        );
+    background-size: 220% 100%;
+    animation: dentoraComposerFlow 7s linear infinite;
+    -webkit-mask:
+        linear-gradient(#000 0 0) content-box,
+        linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+}
+
+.composer:focus-within::before {
+    background:
+        linear-gradient(
+            115deg,
+            transparent 8%,
+            rgba(116,242,255,.55) 34%,
+            rgba(103,184,255,.34) 48%,
+            rgba(154,145,255,.44) 63%,
+            transparent 86%
+        );
+    background-size: 220% 100%;
+}
+
+@keyframes dentoraComposerFlow {
+    from { background-position: 180% 0; }
+    to   { background-position: -40% 0; }
+}
+
+.send-button {
+    animation: dentoraSendGlow 3.6s ease-in-out infinite;
+}
+
+@keyframes dentoraSendGlow {
+    0%,100% { filter: saturate(1) brightness(1); }
+    50%     { filter: saturate(1.16) brightness(1.06); }
+}
+
+/* TEST MODE: futuristic dashboard skin only */
+.test-workspace.show .test-hero {
+    animation: dentoraPanelIn .48s cubic-bezier(.2,.85,.25,1) both;
+}
+
+.test-workspace.show .test-stat-card {
+    animation: dentoraCardIn .48s cubic-bezier(.2,.85,.25,1) both;
+}
+
+.test-workspace.show .test-stat-card:nth-child(1) { animation-delay: .05s; }
+.test-workspace.show .test-stat-card:nth-child(2) { animation-delay: .10s; }
+.test-workspace.show .test-stat-card:nth-child(3) { animation-delay: .15s; }
+.test-workspace.show .test-stat-card:nth-child(4) { animation-delay: .20s; }
+
+.test-workspace.show .test-panel {
+    animation: dentoraPanelIn .50s cubic-bezier(.2,.85,.25,1) .14s both;
+}
+
+@keyframes dentoraPanelIn {
+    from { opacity: 0; transform: translateY(10px) scale(.992); filter: blur(4px); }
+    to   { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
+}
+
+@keyframes dentoraCardIn {
+    from { opacity: 0; transform: translateY(12px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+.test-hero {
+    position: relative;
+    overflow: hidden;
+    border-color: rgba(116,242,255,.18);
+    box-shadow:
+        0 18px 48px rgba(0,0,0,.23),
+        inset 0 1px 0 rgba(255,255,255,.035),
+        0 0 42px rgba(103,232,249,.035);
+}
+
+.test-hero::before,
+.test-panel::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background:
+        linear-gradient(
+            110deg,
+            transparent 0%,
+            rgba(116,242,255,.025) 30%,
+            rgba(154,145,255,.035) 52%,
+            transparent 78%
+        );
+    background-size: 220% 100%;
+    animation: dentoraPanelSheen 9s linear infinite;
+}
+
+@keyframes dentoraPanelSheen {
+    from { background-position: 180% 0; }
+    to   { background-position: -80% 0; }
+}
+
+.test-hero h2 {
+    color: #f4fbff;
+    letter-spacing: .025em;
+    text-shadow:
+        0 0 18px rgba(116,242,255,.08),
+        0 8px 28px rgba(0,0,0,.25);
+}
+
+.readiness-card,
+.test-stat-card,
+.test-panel,
+.test-question-card {
+    position: relative;
+    overflow: hidden;
+    transition:
+        transform .22s ease,
+        border-color .22s ease,
+        box-shadow .22s ease,
+        background .22s ease;
+}
+
+.readiness-card::after,
+.test-stat-card::after {
+    content: "";
+    position: absolute;
+    left: 12%;
+    right: 12%;
+    bottom: 0;
+    height: 1px;
+    pointer-events: none;
+    background:
+        linear-gradient(
+            90deg,
+            transparent,
+            rgba(116,242,255,.48),
+            rgba(154,145,255,.38),
+            transparent
+        );
+    opacity: .32;
+    transition: opacity .2s ease, transform .2s ease;
+}
+
+.readiness-card:hover,
+.test-stat-card:hover {
+    border-color: rgba(116,242,255,.28);
+    box-shadow:
+        inset 0 1px 0 rgba(255,255,255,.045),
+        0 10px 28px rgba(0,0,0,.16),
+        0 0 26px rgba(116,242,255,.055);
+}
+
+.readiness-card:hover::after,
+.test-stat-card:hover::after {
+    opacity: .82;
+    transform: scaleX(1.08);
+}
+
+.readiness-label,
+.test-stat-label,
+.test-field label {
+    color: #829bb5;
+    text-transform: uppercase;
+}
+
+.readiness-value,
+.test-stat-value {
+    background:
+        linear-gradient(
+            90deg,
+            #f5fbff 0%,
+            #9cf5ff 48%,
+            #b4afff 100%
+        );
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    filter: drop-shadow(0 0 11px rgba(116,242,255,.075));
+}
+
+.test-panel {
+    border-color: rgba(116,242,255,.13);
+    box-shadow:
+        inset 0 1px 0 rgba(255,255,255,.025),
+        0 14px 34px rgba(0,0,0,.14);
+}
+
+.test-panel h3 {
+    position: relative;
+    width: fit-content;
+    color: #edfaff;
+    letter-spacing: .035em;
+}
+
+.test-panel h3::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    bottom: -7px;
+    width: 42px;
+    height: 1px;
+    background: linear-gradient(90deg,var(--neon-cyan),transparent);
+    box-shadow: 0 0 9px rgba(116,242,255,.28);
+}
+
+.test-field input,
+.test-field select {
+    transition:
+        border-color .18s ease,
+        box-shadow .18s ease,
+        background .18s ease,
+        transform .18s ease;
+}
+
+.test-field input:hover,
+.test-field select:hover {
+    border-color: rgba(116,242,255,.25);
+}
+
+.test-field input:focus,
+.test-field select:focus {
+    border-color: rgba(116,242,255,.48);
+    background: rgba(5,17,31,.88);
+    box-shadow:
+        0 0 0 3px rgba(116,242,255,.045),
+        0 0 22px rgba(116,242,255,.055);
+}
+
+.test-primary,
+.test-secondary {
+    position: relative;
+    overflow: hidden;
+    transition:
+        transform .18s ease,
+        box-shadow .18s ease,
+        border-color .18s ease,
+        filter .18s ease;
+}
+
+.test-primary::after,
+.test-secondary::after {
+    content: "";
+    position: absolute;
+    top: -50%;
+    left: -42%;
+    width: 30%;
+    height: 200%;
+    pointer-events: none;
+    transform: rotate(18deg);
+    background: linear-gradient(90deg,transparent,rgba(255,255,255,.30),transparent);
+    transition: left .46s ease;
+}
+
+.test-primary:hover::after,
+.test-secondary:hover::after {
+    left: 118%;
+}
+
+.test-primary:hover,
+.test-secondary:hover {
+    transform: translateY(-2px);
+}
+
+.test-primary:hover {
+    box-shadow:
+        inset 0 1px 0 rgba(255,255,255,.35),
+        0 10px 28px rgba(87,190,255,.24),
+        0 0 28px rgba(116,242,255,.11);
+    filter: brightness(1.04);
+}
+
+.test-secondary:hover {
+    border-color: rgba(116,242,255,.30);
+    box-shadow: 0 8px 24px rgba(0,0,0,.16);
+}
+
+.test-timer {
+    text-shadow: 0 0 13px rgba(116,242,255,.28);
+    animation: dentoraTimerPulse 2.6s ease-in-out infinite;
+}
+
+@keyframes dentoraTimerPulse {
+    0%,100% { opacity: .84; }
+    50%     { opacity: 1; }
+}
+
+.test-option {
+    transition:
+        transform .16s ease,
+        border-color .16s ease,
+        background .16s ease,
+        box-shadow .16s ease;
+}
+
+.test-option:hover {
+    transform: translateX(3px);
+    box-shadow: 0 7px 20px rgba(0,0,0,.12);
+}
+
+.test-option.selected {
+    box-shadow:
+        inset 3px 0 0 rgba(116,242,255,.65),
+        0 0 22px rgba(116,242,255,.055);
+}
+
+/* Status and toast life */
+.status-dot.online {
+    animation: dentoraOnlinePulse 2.4s ease-in-out infinite;
+}
+
+@keyframes dentoraOnlinePulse {
+    0%,100% {
+        box-shadow: 0 0 8px rgba(74,222,128,.48);
+        transform: scale(.92);
+    }
+    50% {
+        box-shadow: 0 0 17px rgba(74,222,128,.82);
+        transform: scale(1.08);
+    }
+}
+
+.toast {
+    animation: dentoraToastIn .30s cubic-bezier(.2,.85,.25,1) both;
+}
+
+@keyframes dentoraToastIn {
+    from { opacity: 0; transform: translateX(12px) scale(.985); }
+    to   { opacity: 1; transform: translateX(0) scale(1); }
+}
+
+/* Keep motion respectful and avoid needless battery/GPU work */
+@media (prefers-reduced-motion: reduce) {
+    .background::before,
+    .background::after,
+    .sidebar::after,
+    .brand-logo,
+    .mode.active,
+    .mode.active .mode-icon,
+    .header::before,
+    .hero-kicker-dot,
+    .suggestion,
+    .send-button,
+    .composer::before,
+    .test-workspace.show .test-hero,
+    .test-workspace.show .test-stat-card,
+    .test-workspace.show .test-panel,
+    .test-hero::before,
+    .test-panel::before,
+    .test-timer,
+    .status-dot.online,
+    .toast {
+        animation: none !important;
+    }
+
+    .mode,
+    .new-chat,
+    .suggestion,
+    .test-primary,
+    .test-secondary,
+    .test-option,
+    .readiness-card,
+    .test-stat-card {
+        transition-duration: .01ms !important;
+    }
+}
+
+@media (max-width: 760px) {
+    .sidebar::after {
+        display: none;
+    }
+
+    .background::before {
+        opacity: .16;
+    }
+
+    .background::after {
+        opacity: .28;
     }
 }
 
