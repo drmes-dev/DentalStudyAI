@@ -36,7 +36,7 @@ class PastPaperImportTests(unittest.TestCase):
                 with patch.object(main.rag_store, 'document_sample_pages') as sample:
                     result = main.import_existing_past_paper(None, None)
             self.assertTrue(result['imported'])
-            structure.assert_called_once_with(self.documents[0])
+            structure.assert_called_once_with(self.documents[0], incremental=True, checkpoint=None)
             sample.assert_not_called()
 
     def test_plural_category_is_counted_as_unsynced_in_catalog(self):
@@ -53,6 +53,28 @@ class PastPaperImportTests(unittest.TestCase):
         self.assertIn('No readable OCR text', result['message'])
         self.assertEqual(result['failures'][0]['doc_id'], 'scanned')
 
+    def test_partial_manifest_is_resumed(self):
+        checkpoint = {'paper_id': 'scanned', 'import_complete': False, 'processed_pages': 2}
+        with patch.object(main.past_paper_store, 'list_papers', return_value=[checkpoint]):
+            with patch.object(main, 'structure_existing_rag_paper', return_value={'success': True, 'imported': True}) as structure:
+                main.import_existing_past_paper(None, None)
+        structure.assert_called_once_with(self.documents[0], incremental=True, checkpoint=checkpoint)
+
+    def test_incremental_import_persists_two_pages_and_resumes_with_overlap(self):
+        pages = [{'page': i, 'text': 'Exam text'} for i in range(1, 6)]
+        question = {'stem': 'Actual source question?', 'options': {'A': 'one', 'B': 'two'}, 'page': 3}
+        checkpoint = {'paper_id': 'scanned', 'processed_pages': 2, 'import_complete': False,
+                      'subject': 'Orthodontics', 'year': '2025', 'title': 'Exam', 'question_count': 4}
+        with patch.object(main.rag_store, 'document_pages', return_value=pages):
+            with patch.object(main, 'parse_past_paper_questions', return_value=[question]) as parser:
+                with patch.object(main.past_paper_store, 'index_paper', return_value={'success': True, 'question_count': 5}) as save:
+                    result = main.structure_existing_rag_paper(self.documents[0], incremental=True, checkpoint=checkpoint)
+        parser.assert_called_once_with(pages=pages[1:4], subject='Orthodontics')
+        self.assertFalse(save.call_args.kwargs['replace_existing'])
+        self.assertEqual(save.call_args.kwargs['import_progress']['processed_pages'], 4)
+        self.assertFalse(result['complete'])
+        self.assertEqual(result['processed_pages'], 4)
+
     def test_already_imported_paper_is_not_reprocessed(self):
         with patch.object(main.past_paper_store, 'list_papers', return_value=[{'paper_id': 'scanned'}]):
             with patch.object(main, 'structure_existing_rag_paper') as structure:
@@ -64,3 +86,38 @@ class PastPaperImportTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+class QuestionBankPipelineTests(unittest.TestCase):
+    def test_ocr_question_saves_without_embedding_and_can_be_tested_and_graded(self):
+        from test_engine import PastPaperStore
+        records = {}
+        class MemoryIndex:
+            def upsert(self, vectors, namespace):
+                for vector in vectors:
+                    records[(namespace, vector['id'])] = vector
+            def fetch(self, ids, namespace):
+                return {'vectors': {key: records[(namespace, key)] for key in ids if (namespace, key) in records}}
+        store = PastPaperStore()
+        store._index = lambda: MemoryIndex()
+        def list_ids(namespace, prefix):
+            return [key for ns, key in records if ns == namespace and key.startswith(prefix)]
+        with patch.object(main.rag_store, '_list_ids', side_effect=list_ids):
+            with patch.object(main.rag_store, 'embed', side_effect=AssertionError('Bank must not require embeddings')):
+                store.index_paper(paper_id='exam', title='Orthodontics Exam', subject='Orthodontics',
+                    year='2025', filename='scan.pdf', replace_existing=False,
+                    import_progress={'processed_pages': 2, 'import_complete': False},
+                    questions=[{'stem': 'Which tooth is shown in the paper?', 'page': 2,
+                                'options': {'A': 'Incisor', 'B': 'Canine'}, 'suggested_answer': 'B'}])
+                self.assertEqual(store.catalog()['test_ready_questions'], 1)
+                test = store.sample_test(count=20, subject='Orthodontics')
+                self.assertEqual(len(test), 1)
+                self.assertNotIn('provisional_answer', test[0])
+                grade = store.grade([{'question_id': test[0]['id'], 'answer': 'B'}])
+                self.assertEqual(grade['score_percent'], 100)
+                # Retry is an idempotent upsert, not another copy of the MCQ.
+                store.index_paper(paper_id='exam', title='Orthodontics Exam', subject='Orthodontics',
+                    year='2025', filename='scan.pdf', replace_existing=False,
+                    import_progress={'processed_pages': 2, 'import_complete': False},
+                    questions=[{'stem': 'Which tooth is shown in the paper?', 'page': 2,
+                                'options': {'A': 'Incisor', 'B': 'Canine'}, 'suggested_answer': 'B'}])
+                self.assertEqual(store.catalog()['mcq_count'], 1)

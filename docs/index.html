@@ -5150,9 +5150,9 @@ async function loadTestCatalog(
         bankEligibleCount.textContent = "…";
         bankRepeatedCount.textContent = "…";
 
-        await importExistingPastPapers(
+        importExistingPastPapers(
             true
-        );
+        ).then(() => loadTestCatalog(false));
     }
 
     try {
@@ -5231,7 +5231,8 @@ async function loadTestCatalog(
                 );
 
             ragPastPaperSyncStatus.textContent =
-                paperCount > 0
+                lastPastPaperSyncMessage || (legacyPastPaperImportRunning
+                    ? "Reading the next batch of scanned MCQs…" : paperCount > 0
                     ? (
                         paperCount +
                         " past paper" +
@@ -5244,7 +5245,7 @@ async function loadTestCatalog(
                         mcqCount +
                         " MCQs in the question bank."
                     )
-                    : (lastPastPaperSyncMessage || "No MCQs have been imported yet. Click Refresh question bank.");
+                    : "No MCQs have been imported yet. Click Refresh question bank.");
         }
 
         if (
@@ -5386,7 +5387,7 @@ async function importExistingPastPapers(
     try {
         for (
             let pass = 0;
-            pass < 20;
+        pass < 240;
             pass += 1
         ) {
             const response =
@@ -5432,7 +5433,7 @@ async function importExistingPastPapers(
                 break;
             }
 
-            importedCount += 1;
+            if (data.complete !== false) importedCount += 1;
 
             const paperLabel =
                 data.title ||
@@ -5444,10 +5445,12 @@ async function importExistingPastPapers(
 
             if (ragPastPaperSyncStatus) {
                 ragPastPaperSyncStatus.textContent =
-                    "Added " +
-                    paperLabel +
-                    " to the MCQ bank.";
+                    paperLabel + " · " + Number(data.processed_pages || 0) +
+                    "/" + Number(data.total_pages || 0) + " pages processed · " +
+                    Number(data.question_count || 0) + " questions saved.";
             }
+            lastPastPaperSyncMessage = ragPastPaperSyncStatus.textContent;
+            await loadTestCatalog(false);
         }
 
         if (ragPastPaperSyncStatus) {

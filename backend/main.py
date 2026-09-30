@@ -439,11 +439,15 @@ def require_owner_access(supplied_key: Optional[str]):
 # AI GENERATION
 # =========================================================
 
-def generate_with_fallback(prompt: str) -> Dict[str, str]:
+def generate_with_fallback(prompt: str, timeout_seconds: Optional[int] = None) -> Dict[str, str]:
     try:
         response = gemini_client.models.generate_content(
             model="gemini-3.5-flash",
             contents=prompt,
+            **({"config": {"http_options": {
+                "timeout": timeout_seconds * 1000,
+                "retry_options": {"attempts": 1},
+            }}} if timeout_seconds else {}),
         )
         if response and response.text:
             return {
@@ -454,7 +458,8 @@ def generate_with_fallback(prompt: str) -> Dict[str, str]:
         print("Gemini error:", exc)
 
     try:
-        response = groq_client.chat.completions.create(
+        client = groq_client.with_options(timeout=timeout_seconds, max_retries=0) if timeout_seconds else groq_client
+        response = client.chat.completions.create(
             model="openai/gpt-oss-120b",
             messages=[{
                 "role": "user",
@@ -471,7 +476,8 @@ def generate_with_fallback(prompt: str) -> Dict[str, str]:
         print("Groq error:", exc)
 
     try:
-        response = qwen_client.chat.completions.create(
+        client = qwen_client.with_options(timeout=timeout_seconds, max_retries=0) if timeout_seconds else qwen_client
+        response = client.chat.completions.create(
             model="qwen-plus",
             messages=[{
                 "role": "user",
@@ -486,6 +492,9 @@ def generate_with_fallback(prompt: str) -> Dict[str, str]:
             }
     except Exception as exc:
         print("Qwen API error:", exc)
+
+    if timeout_seconds:
+        return {"response": "Cloud AI providers are unavailable; retry this batch.", "provider": "Error"}
 
     try:
         response = ollama.chat(
@@ -701,7 +710,7 @@ RULES
     and answer choices can be reconstructed directly from the supplied text.
 13. Return JSON only. No commentary and no Markdown.
 """
-        generated = generate_with_fallback(prompt)
+        generated = generate_with_fallback(prompt, timeout_seconds=20)
 
         if generated.get("provider") == "Error":
             raise RuntimeError(
@@ -1060,7 +1069,7 @@ RULES
 5. Return JSON only.
 """
 
-    generated = generate_with_fallback(prompt)
+    generated = generate_with_fallback(prompt, timeout_seconds=20)
 
     fallback_subject = _fallback_past_paper_subject(
         filename,
@@ -1419,7 +1428,7 @@ OCR is too damaged or the item is genuinely ambiguous, return an empty answer.
 def root():
     return {
         "message": "Dentora backend is running.",
-        "version": "2.4.1-auto-detect-scanned-papers",
+        "version": "2.4.2-resumable-question-bank",
     }
 
 
@@ -2283,6 +2292,8 @@ def structure_existing_rag_paper(
     subject_override: str = "",
     year_override: str = "",
     title_override: str = "",
+    incremental: bool = False,
+    checkpoint: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     doc_id = str(
         document.get("doc_id", "")
@@ -2302,10 +2313,22 @@ def structure_existing_rag_paper(
             "Dentora could not reconstruct readable page text from this indexed PDF."
         )
 
-    metadata = infer_existing_past_paper_metadata(
-        document,
-        pages,
-    )
+    total_pages = len(pages)
+    offset = int((checkpoint or {}).get("processed_pages", 0)) if incremental else 0
+    end = min(offset + 2, total_pages) if incremental else total_pages
+    # Include the preceding page to recover stems/options crossing page breaks.
+    batch_pages = pages[max(0, offset - 1):end] if incremental else pages
+    if checkpoint:
+        metadata = checkpoint
+    elif incremental:
+        metadata = {
+            "subject": canonical_bds_subject(document.get("filename", ""), document.get("title", ""))
+                or _fallback_past_paper_subject(document.get("filename", ""), document.get("title", "")),
+            "year": next(iter(re.findall(r"\b(?:19|20)\d{2}\b", str(document.get("title", "")) + " " + str(document.get("filename", "")))), "Unknown"),
+            "title": document.get("title") or document.get("filename") or "Past Paper",
+        }
+    else:
+        metadata = infer_existing_past_paper_metadata(document, pages)
 
     subject = (
         canonical_bds_subject(
@@ -2347,16 +2370,14 @@ def structure_existing_rag_paper(
     )[:300]
 
     questions = parse_past_paper_questions(
-        pages=pages,
+        pages=batch_pages,
         subject=subject,
     )
 
-    questions = canonicalize_past_paper_topics(
-        questions,
-        subject,
-    )
+    if not incremental:
+        questions = canonicalize_past_paper_topics(questions, subject)
 
-    if not questions:
+    if not questions and (not incremental or (end == total_pages and not (checkpoint or {}).get("question_count", 0))):
         raise ValueError(
             "No clear examination questions could be structured from this indexed PDF."
         )
@@ -2368,7 +2389,12 @@ def structure_existing_rag_paper(
         year=year,
         filename=document.get("filename", ""),
         questions=questions,
-        replace_existing=True,
+        replace_existing=not incremental,
+        import_progress=({
+            "processed_pages": end,
+            "total_import_pages": total_pages,
+            "import_complete": end >= total_pages,
+        } if incremental else None),
     )
 
     result.update({
@@ -2378,6 +2404,9 @@ def structure_existing_rag_paper(
             "category",
             "",
         ),
+        "processed_pages": end,
+        "total_pages": total_pages,
+        "complete": end >= total_pages,
     })
 
     return result
@@ -2456,8 +2485,8 @@ def import_existing_past_paper(
     """Migrate one already-indexed RAG past paper into Test Mode.
 
     This prevents owners from having to upload the same PDF twice. Each call
-    imports at most one paper so Render requests remain bounded; the frontend
-    repeats the call until no eligible legacy papers remain.
+    saves at most two new pages, with a persistent checkpoint. The frontend
+    repeats the call and can resume after an interrupted request.
     """
     require_owner_access(
         x_dentora_beta_key
@@ -2466,7 +2495,7 @@ def import_existing_past_paper(
     enforce_rate_limit(
         request,
         "past-paper-import-existing",
-        20,
+        240,
         60 * 60,
     )
 
@@ -2481,6 +2510,8 @@ def import_existing_past_paper(
             ),
         )
 
+    existing_papers = past_paper_store.list_papers()
+    checkpoints = {str(paper.get("paper_id", "")): paper for paper in existing_papers}
     existing_ids = {
         str(
             paper.get(
@@ -2488,7 +2519,8 @@ def import_existing_past_paper(
                 "",
             )
         )
-        for paper in past_paper_store.list_papers()
+        for paper in existing_papers
+        if paper.get("import_complete", True)
     }
 
     documents = rag_store.list_documents()
@@ -2647,7 +2679,9 @@ def import_existing_past_paper(
 
         try:
             result = structure_existing_rag_paper(
-                document
+                document,
+                incremental=True,
+                checkpoint=checkpoints.get(doc_id),
             )
 
             return result
@@ -2813,9 +2847,16 @@ def test_catalog(
                 or 0
             ),
         )
-        catalog["rag_sync_complete"] = (
-            catalog.get("paper_count", 0)
-            >= rag_past_paper_count
+        completed_ids = {
+            str(paper.get("paper_id", ""))
+            for paper in catalog.get("papers", [])
+            if paper.get("import_complete", True)
+        }
+        catalog["rag_sync_complete"] = all(
+            str(document.get("doc_id", "")) in completed_ids
+            for document in rag_documents
+            if str(document.get("category", "")).strip().lower()
+                in {"past paper", "past papers"}
         )
     except Exception as exc:
         print(

@@ -94,6 +94,7 @@ class PastPaperStore:
         filename: str,
         questions: List[Dict[str, Any]],
         replace_existing: bool = True,
+        import_progress: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         index = self._index()
 
@@ -124,7 +125,7 @@ class PastPaperStore:
             question_id = _clean(raw.get("question_id"), 80)
             if not question_id:
                 question_id = hashlib.sha256(
-                    f"{paper_id}|{position}|{stem}".encode("utf-8")
+                    f"{paper_id}|{raw.get('page', 0)}|{stem}".encode("utf-8")
                 ).hexdigest()[:16]
 
             suggested_answer = _clean(
@@ -166,13 +167,13 @@ class PastPaperStore:
             }
             clean_questions.append(item)
 
-        if not clean_questions:
+        if not clean_questions and import_progress is None:
             raise ValueError("No usable questions were parsed from this paper.")
 
-        vectors = rag_store.embed(
-            [_question_text(item) for item in clean_questions],
-            "passage",
-        )
+        # Tests use exact ID fetches and metadata filters, never vector search.
+        # Avoid an unnecessary embedding API/quota dependency for the bank.
+        storage_vector = [1.0] + [0.0] * (EMBED_DIMENSION - 1)
+        vectors = [storage_vector for item in clean_questions]
 
         indexed_at = now_iso()
         records = []
@@ -222,13 +223,12 @@ class PastPaperStore:
                 namespace=TEST_NS,
             )
 
-        manifest_vector = rag_store.embed(
-            [
-                f"{title}. {subject}. {year}. "
-                f"Past paper with {len(records)} structured questions."
-            ],
-            "passage",
-        )[0]
+        manifest_vector = storage_vector
+        question_count = len(records)
+        if not replace_existing:
+            question_count = len(set(
+                rag_store._list_ids(TEST_NS, f"ppq#{paper_id}#")
+            ) | {record["id"] for record in records})
 
         index.upsert(
             vectors=[{
@@ -241,7 +241,7 @@ class PastPaperStore:
                     "subject": _clean(subject or "Unspecified", 160),
                     "year": _clean(year or "Unknown", 40),
                     "filename": _clean(filename, 300),
-                    "question_count": len(records),
+                    "question_count": question_count,
                     "verified_count": 0,
                     "conflict_count": 0,
                     "insufficient_count": 0,
@@ -251,6 +251,7 @@ class PastPaperStore:
                         if item["verification_status"] == "pending"
                     ),
                     "indexed_at": indexed_at,
+                    **(import_progress or {}),
                 },
             }],
             namespace=TEST_MANIFEST_NS,
@@ -262,7 +263,8 @@ class PastPaperStore:
             "title": title,
             "subject": subject,
             "year": year,
-            "question_count": len(records),
+            "question_count": question_count,
+            "added_questions": len(records),
             "pending_count": sum(
                 1
                 for item in clean_questions
