@@ -3844,6 +3844,7 @@ let activeTestStartedAt = 0;
 let activeTestDurationSeconds = 0;
 let activeTestTimer = null;
 let legacyPastPaperImportRunning = false;
+let lastPastPaperSyncMessage = "";
 let questionBankRepairRunning = false;
 
 let ownerAccessCode =
@@ -5243,7 +5244,7 @@ async function loadTestCatalog(
                         mcqCount +
                         " MCQs in the question bank."
                     )
-                    : "Scanning your indexed RAG PDFs for past-paper MCQs…";
+                    : (lastPastPaperSyncMessage || "No MCQs have been imported yet. Click Refresh question bank.");
         }
 
         if (
@@ -5422,7 +5423,12 @@ async function importExistingPastPapers(
             const data =
                 await response.json();
 
+            if (data.success === false) {
+                throw new Error(data.message || "Past-paper import failed.");
+            }
+
             if (!data.imported) {
+                lastPastPaperSyncMessage = data.message || "Question bank is up to date.";
                 break;
             }
 
@@ -5458,7 +5464,7 @@ async function importExistingPastPapers(
                         ) +
                         " added to the bank."
                     )
-                    : "Question bank is up to date.";
+                    : lastPastPaperSyncMessage;
         }
 
         return importedCount;
@@ -5468,6 +5474,7 @@ async function importExistingPastPapers(
             "Automatic Past Paper synchronization error:",
             error
         );
+        lastPastPaperSyncMessage = error.message || "Automatic Past Paper synchronization failed.";
 
         if (ragPastPaperSyncStatus) {
             ragPastPaperSyncStatus.textContent =

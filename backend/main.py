@@ -2542,7 +2542,7 @@ def import_existing_past_paper(
 
         if (
             "past" in category_words
-            and "paper" in category_words
+            and bool({"paper", "papers"} & category_words)
         ):
             strong_candidates.append(
                 document
@@ -2636,6 +2636,7 @@ def import_existing_past_paper(
             ),
         }
 
+    failures = []
     for document in candidates:
         doc_id = str(
             document.get(
@@ -2657,14 +2658,24 @@ def import_existing_past_paper(
                 doc_id,
                 exc,
             )
+            failures.append({
+                "doc_id": doc_id,
+                "filename": document.get("filename", ""),
+                "error": str(exc),
+            })
             continue
 
     return {
-        "success": True,
+        "success": False,
         "imported": False,
+        "failures": failures,
         "message": (
             "Past-paper candidates were found, but Dentora could not "
-            "structure readable questions from them."
+            "structure readable questions from them. "
+            + "; ".join(
+                f"{item['filename']}: {item['error']}"
+                for item in failures
+            )
         ),
     }
 
@@ -2788,7 +2799,7 @@ def test_catalog(
 
             if (
                 "past" in category_words
-                and "paper" in category_words
+                and bool({"paper", "papers"} & category_words)
             ):
                 rag_past_paper_count += 1
 
