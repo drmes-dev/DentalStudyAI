@@ -121,3 +121,28 @@ class QuestionBankPipelineTests(unittest.TestCase):
                     questions=[{'stem': 'Which tooth is shown in the paper?', 'page': 2,
                                 'options': {'A': 'Incisor', 'B': 'Canine'}, 'suggested_answer': 'B'}])
                 self.assertEqual(store.catalog()['mcq_count'], 1)
+
+class BackgroundImportTests(unittest.TestCase):
+    def test_parser_requests_structured_json_and_preserves_source_question(self):
+        import json
+        raw = {'stem': 'Which tooth is shown?', 'options': {'A': 'Incisor', 'B': 'Canine'}, 'page': 2, 'suggested_answer': 'B'}
+        with patch.object(main, 'generate_with_fallback', return_value={'provider': 'Groq', 'response': json.dumps({'questions': [raw]})}) as generate:
+            result = main.parse_past_paper_questions(pages=[{'page': 2, 'text': 'Which tooth is shown? A. Incisor B. Canine'}], subject='Orthodontics')
+        self.assertEqual(result, [raw])
+        self.assertTrue(generate.call_args.kwargs['json_response'])
+
+    def test_worker_retries_and_keeps_saved_progress(self):
+        with main._paper_sync_lock:
+            main._paper_sync_state.update(running=True, saved_batches=0, complete=False)
+        results = [
+            {'success': False, 'message': 'Temporary provider failure'},
+            {'success': True, 'imported': True, 'title': 'Exam', 'processed_pages': 2, 'total_pages': 4, 'question_count': 10},
+            {'success': True, 'imported': False},
+        ]
+        with patch.object(main, 'import_next_existing_paper', side_effect=results):
+            with patch.object(main.time, 'sleep') as delay:
+                main.paper_sync_worker()
+        self.assertEqual(delay.call_count, 1)
+        self.assertEqual(main._paper_sync_state['saved_batches'], 1)
+        self.assertTrue(main._paper_sync_state['complete'])
+        self.assertFalse(main._paper_sync_state['running'])

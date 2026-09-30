@@ -5365,136 +5365,39 @@ async function crossCheckImportedPaper(
 }
 
 
-async function importExistingPastPapers(
-    automatic = true
-) {
-    if (
-        !ownerAccessCode ||
-        legacyPastPaperImportRunning
-    ) {
-        return 0;
-    }
-
+async function importExistingPastPapers(automatic = true) {
+    if (!ownerAccessCode || legacyPastPaperImportRunning) return 0;
     legacyPastPaperImportRunning = true;
-
-    if (ragPastPaperSyncStatus) {
-        ragPastPaperSyncStatus.textContent =
-            "Reading your RAG Past Papers and updating the question bank…";
-    }
-
-    let importedCount = 0;
-
+    let savedBatches = -1;
     try {
-        for (
-            let pass = 0;
-        pass < 240;
-            pass += 1
-        ) {
-            const response =
-                await fetch(
-                    PAST_PAPER_IMPORT_API,
-                    {
-                        method: "POST",
-                        headers:
-                            betaHeaders(false)
-                    }
-                );
-
+        let response = await fetch(API_BASE + "/past-papers/sync", {
+            method: "POST", headers: betaHeaders(false)
+        });
+        while (true) {
             if (!response.ok) {
-                let detail =
-                    "Automatic Past Paper synchronization failed.";
-
-                try {
-                    const errorData =
-                        await response.json();
-
-                    if (
-                        errorData &&
-                        typeof errorData.detail ===
-                            "string"
-                    ) {
-                        detail =
-                            errorData.detail;
-                    }
-                } catch (_) {}
-
-                throw new Error(detail);
+                const body = await response.json().catch(() => ({}));
+                throw new Error(body.detail || "Question-bank synchronization paused. Refresh to resume.");
             }
-
-            const data =
-                await response.json();
-
-            if (data.success === false) {
-                throw new Error(data.message || "Past-paper import failed.");
+            const progress = await response.json();
+            lastPastPaperSyncMessage = progress.message || "Reading scanned MCQs…";
+            if (progress.retrying) lastPastPaperSyncMessage += " Automatic retry in progress; saved questions remain available.";
+            ragPastPaperSyncStatus.textContent = lastPastPaperSyncMessage;
+            if (savedBatches !== Number(progress.saved_batches || 0) || !progress.running) {
+                savedBatches = Number(progress.saved_batches || 0);
+                await loadTestCatalog(false);
             }
-
-            if (!data.imported) {
-                lastPastPaperSyncMessage = data.message || "Question bank is up to date.";
-                break;
-            }
-
-            if (data.complete !== false) importedCount += 1;
-
-            const paperLabel =
-                data.title ||
-                data.filename ||
-                (
-                    "past paper " +
-                    importedCount
-                );
-
-            if (ragPastPaperSyncStatus) {
-                ragPastPaperSyncStatus.textContent =
-                    paperLabel + " · " + Number(data.processed_pages || 0) +
-                    "/" + Number(data.total_pages || 0) + " pages processed · " +
-                    Number(data.question_count || 0) + " questions saved.";
-            }
-            lastPastPaperSyncMessage = ragPastPaperSyncStatus.textContent;
-            await loadTestCatalog(false);
+            if (!progress.running) break;
+            await new Promise(resolve => setTimeout(resolve, 3000));
+            response = await fetch(API_BASE + "/past-papers/sync", {
+                headers: betaHeaders(false), cache: "no-store"
+            });
         }
-
-        if (ragPastPaperSyncStatus) {
-            ragPastPaperSyncStatus.textContent =
-                importedCount > 0
-                    ? (
-                        "Automatic RAG sync complete — " +
-                        importedCount +
-                        " new past paper" +
-                        (
-                            importedCount === 1
-                                ? ""
-                                : "s"
-                        ) +
-                        " added to the bank."
-                    )
-                    : lastPastPaperSyncMessage;
-        }
-
-        return importedCount;
-
+        return savedBatches;
     } catch (error) {
-        console.error(
-            "Automatic Past Paper synchronization error:",
-            error
-        );
-        lastPastPaperSyncMessage = error.message || "Automatic Past Paper synchronization failed.";
-
-        if (ragPastPaperSyncStatus) {
-            ragPastPaperSyncStatus.textContent =
-                error.message ||
-                "Automatic Past Paper synchronization failed.";
-        }
-
-        if (!automatic) {
-            showToast(
-                error.message ||
-                "Automatic Past Paper synchronization failed.",
-                "error"
-            );
-        }
-
+        lastPastPaperSyncMessage = error.message || "Import paused. Refresh to resume.";
+        ragPastPaperSyncStatus.textContent = lastPastPaperSyncMessage;
+        if (!automatic) showToast(lastPastPaperSyncMessage, "error");
         return 0;
-
     } finally {
         legacyPastPaperImportRunning = false;
     }

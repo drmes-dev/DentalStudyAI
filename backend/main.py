@@ -14,7 +14,7 @@ import re
 import time
 import hmac
 import json
-from threading import Lock
+from threading import Lock, Thread
 
 import pytesseract
 import ollama
@@ -439,7 +439,7 @@ def require_owner_access(supplied_key: Optional[str]):
 # AI GENERATION
 # =========================================================
 
-def generate_with_fallback(prompt: str, timeout_seconds: Optional[int] = None) -> Dict[str, str]:
+def generate_with_fallback(prompt: str, timeout_seconds: Optional[int] = None, json_response: bool = False) -> Dict[str, str]:
     try:
         response = gemini_client.models.generate_content(
             model="gemini-3.5-flash",
@@ -447,7 +447,7 @@ def generate_with_fallback(prompt: str, timeout_seconds: Optional[int] = None) -
             **({"config": {"http_options": {
                 "timeout": timeout_seconds * 1000,
                 "retry_options": {"attempts": 1},
-            }}} if timeout_seconds else {}),
+            }, **({"response_mime_type": "application/json"} if json_response else {})}} if timeout_seconds else {}),
         )
         if response and response.text:
             return {
@@ -465,6 +465,7 @@ def generate_with_fallback(prompt: str, timeout_seconds: Optional[int] = None) -
                 "role": "user",
                 "content": prompt,
             }],
+            **({"response_format": {"type": "json_object"}, "reasoning_effort": "low"} if json_response else {}),
         )
         text = response.choices[0].message.content
         if text:
@@ -483,6 +484,7 @@ def generate_with_fallback(prompt: str, timeout_seconds: Optional[int] = None) -
                 "role": "user",
                 "content": prompt,
             }],
+            **({"response_format": {"type": "json_object"}} if json_response else {}),
         )
         text = response.choices[0].message.content
         if text:
@@ -671,7 +673,7 @@ do not invent missing question content.
 
 OUTPUT
 ------
-Return ONLY a JSON array. Each item must have exactly these fields:
+Return ONLY a JSON object with a "questions" array. Each item in that array must have these fields:
 - question_number
 - stem
 - options
@@ -683,6 +685,7 @@ Return ONLY a JSON array. Each item must have exactly these fields:
 - provided_answer
 - suggested_answer
 - suggested_confidence
+- year (exam year explicitly shown on the source pages, otherwise Unknown)
 
 RULES
 -----
@@ -710,7 +713,7 @@ RULES
     and answer choices can be reconstructed directly from the supplied text.
 13. Return JSON only. No commentary and no Markdown.
 """
-        generated = generate_with_fallback(prompt, timeout_seconds=20)
+        generated = generate_with_fallback(prompt, timeout_seconds=60, json_response=True)
 
         if generated.get("provider") == "Error":
             raise RuntimeError(
@@ -720,8 +723,9 @@ RULES
 
         parsed = _json_payload(
             generated.get("response", ""),
-            "array",
+            "object",
         )
+        parsed = parsed.get("questions") if isinstance(parsed, dict) else None
 
         if not isinstance(parsed, list):
             raise ValueError("Past-paper parser returned a non-list payload.")
@@ -1428,7 +1432,7 @@ OCR is too damaged or the item is genuinely ambiguous, return an empty answer.
 def root():
     return {
         "message": "Dentora backend is running.",
-        "version": "2.4.2-resumable-question-bank",
+        "version": "2.4.3-background-question-bank",
     }
 
 
@@ -2499,6 +2503,11 @@ def import_existing_past_paper(
         60 * 60,
     )
 
+    return import_next_existing_paper()
+
+
+def import_next_existing_paper():
+    """Process a bounded, resumable unit without an HTTP request dependency."""
     if not (
         rag_store.configured
         and past_paper_store.configured
@@ -2712,6 +2721,62 @@ def import_existing_past_paper(
             )
         ),
     }
+
+
+# One worker per server; page checkpoints are stored persistently in Pinecone.
+_paper_sync_lock = Lock()
+_paper_sync_state: Dict[str, Any] = {"running": False, "message": "", "saved_batches": 0}
+
+
+def paper_sync_worker():
+    failures = 0
+    try:
+        for step in range(10000):
+            result = import_next_existing_paper()
+            if not result.get("success", False):
+                failures += 1
+                delay = min(15 * (2 ** (failures - 1)), 60)
+                with _paper_sync_lock:
+                    _paper_sync_state.update(message=result.get("message", "Import paused."), retrying=failures <= 3)
+                if failures > 3:
+                    break
+                time.sleep(delay)
+                continue
+            failures = 0
+            if not result.get("imported"):
+                with _paper_sync_lock:
+                    _paper_sync_state.update(message="All detected past papers have been processed.", complete=True)
+                break
+            with _paper_sync_lock:
+                _paper_sync_state.update(
+                    message=f"{result.get('title', 'Past paper')} · {result.get('processed_pages', 0)}/{result.get('total_pages', 0)} pages processed · {result.get('question_count', 0)} questions saved.",
+                    saved_batches=_paper_sync_state.get("saved_batches", 0) + 1,
+                    retrying=False,
+                )
+    except Exception as exc:
+        with _paper_sync_lock:
+            _paper_sync_state.update(message=f"Import paused: {exc}. Refresh question bank to resume.")
+    finally:
+        with _paper_sync_lock:
+            _paper_sync_state["running"] = False
+
+
+@app.post("/past-papers/sync")
+def start_paper_sync(request: Request, x_dentora_beta_key: Optional[str] = Header(default=None, alias="X-Dentora-Beta-Key")):
+    require_owner_access(x_dentora_beta_key)
+    enforce_rate_limit(request, "past-paper-sync-start", 20, 3600)
+    with _paper_sync_lock:
+        if not _paper_sync_state["running"]:
+            _paper_sync_state.update(running=True, complete=False, retrying=False, message="Reading the next batch of scanned MCQs…", saved_batches=0)
+            Thread(target=paper_sync_worker, daemon=True).start()
+        return dict(_paper_sync_state)
+
+
+@app.get("/past-papers/sync")
+def paper_sync_status(x_dentora_beta_key: Optional[str] = Header(default=None, alias="X-Dentora-Beta-Key")):
+    require_owner_access(x_dentora_beta_key)
+    with _paper_sync_lock:
+        return dict(_paper_sync_state)
 
 
 @app.post("/past-papers/{paper_id}/verify")

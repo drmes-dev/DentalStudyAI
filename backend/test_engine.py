@@ -164,6 +164,7 @@ class PastPaperStore:
                 "verification_sources": [],
                 "verification_attempts": 0,
                 "stem_hash": _stem_hash(stem),
+                "year": _clean(raw.get("year") if raw.get("year") not in (None, "", "Unknown") else (year or "Unknown"), 40),
             }
             clean_questions.append(item)
 
@@ -184,7 +185,7 @@ class PastPaperStore:
                 "paper_id": paper_id,
                 "paper_title": _clean(title, 300),
                 "subject": _clean(subject or "Unspecified", 160),
-                "year": _clean(year or "Unknown", 40),
+                "year": item["year"],
                 "filename": _clean(filename, 300),
                 "question_id": item["question_id"],
                 "question_number": item["question_number"],
