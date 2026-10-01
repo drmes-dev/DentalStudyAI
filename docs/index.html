@@ -3922,6 +3922,72 @@ body {
     }
 }
 
+
+/* Mobile navigation and complete station shortcuts. Keep the existing visual theme. */
+.sidebar-close { display: none; }
+.suggestion-copy { min-width: 0; }
+.suggestion[data-card="test"] {
+    border-color: rgba(116,242,255,.38);
+    background: linear-gradient(135deg,rgba(20,57,73,.85),rgba(28,27,66,.74));
+}
+.suggestion[data-card="test"] .suggestion-icon { color: #a8fbff; }
+.suggestion[data-card="pdf"] .suggestion-icon { color: #b6adff; }
+@media (min-width: 1100px) {
+    .suggestions { grid-template-columns: repeat(3,minmax(0,1fr)); }
+}
+@media (max-width: 760px) {
+    .sidebar {
+        width: min(300px,calc(100vw - 48px));
+        padding-top: max(14px,env(safe-area-inset-top));
+        padding-bottom: max(18px,env(safe-area-inset-bottom));
+        visibility: hidden;
+        transition: transform .28s var(--motion-smooth),visibility .28s;
+    }
+    .sidebar.open { visibility: visible; }
+    .sidebar-close {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+        width: 44px;
+        height: 44px;
+        margin-left: auto;
+        border: 1px solid rgba(116,242,255,.24);
+        border-radius: 12px;
+        background: rgba(116,242,255,.06);
+        color: #dffcff;
+        font-size: 23px;
+        cursor: pointer;
+    }
+    .mobile-menu {
+        flex-shrink: 0;
+        width: auto;
+        min-height: 44px;
+        padding: 0 10px;
+        gap: 6px;
+        font-size: 12px;
+    }
+    .mobile-menu .menu-symbol { font-size: 20px; }
+    .header-left { min-width: 0; gap: 9px; }
+    .header-left > div { min-width: 0; }
+    .page-title { overflow-wrap: anywhere; }
+    .header-right { flex-shrink: 0; }
+    .suggestions { margin-top: 20px; gap: 10px; }
+    .suggestion { min-height: 80px; }
+}
+@media (min-width: 440px) and (max-width: 760px) {
+    .suggestions { grid-template-columns: repeat(2,minmax(0,1fr)); }
+}
+.sidebar-close:focus-visible,
+.mobile-menu:focus-visible,
+.suggestion:focus-visible {
+    outline: 2px solid #74f2ff;
+    outline-offset: 3px;
+}
+@media (prefers-reduced-motion: reduce) {
+    .sidebar { transition-duration: .01ms; }
+}
+
 </style>
 </head>
 
@@ -3979,9 +4045,10 @@ body {
     </div>
 </div>
 
-<div class="overlay" id="overlay"></div>
-
 <div class="app">
+
+    <!-- Same stacking context as the drawer so the overlay stays behind it. -->
+    <div class="overlay" id="overlay" aria-hidden="true"></div>
 
     <!-- =========================
          SIDEBAR
@@ -4018,6 +4085,8 @@ body {
                 <h1>Dentora</h1>
                 <span>by Ehsan</span>
             </div>
+
+            <button class="sidebar-close" id="sidebarClose" type="button" aria-label="Close menu">×</button>
 
         </div>
 
@@ -4186,9 +4255,12 @@ body {
                     class="mobile-menu"
                     id="mobileMenu"
                     type="button"
-                    aria-label="Open menu"
+                    aria-label="Open study menu"
+                    aria-controls="sidebar"
+                    aria-expanded="false"
                 >
-                    ☰
+                    <span class="menu-symbol" aria-hidden="true">☰</span>
+                    <span>Menu</span>
                 </button>
 
                 <div>
@@ -4306,6 +4378,7 @@ body {
                 <button
                     class="suggestion"
                     data-card="clinical"
+                    data-mode="study"
                     type="button"
                     data-prompt="Explain the most important clinical points about trigeminal nerve lesions for a BDS exam."
                 >
@@ -4322,9 +4395,18 @@ body {
                     </div>
                 </button>
 
+                <button class="suggestion" data-card="test" data-mode="test" type="button">
+                    <div class="suggestion-icon" aria-hidden="true">✓</div>
+                    <div class="suggestion-copy">
+                        <div class="suggestion-title">Test Mode</div>
+                        <div class="suggestion-text">Past-paper tests, scores and readiness.</div>
+                    </div>
+                </button>
+
                 <button
                     class="suggestion"
                     data-card="mcq"
+                    data-mode="mcq"
                     type="button"
                     data-prompt="Give me one difficult BDS-level MCQ on oral pathology. Ask me one question at a time."
                 >
@@ -4344,6 +4426,7 @@ body {
                 <button
                     class="suggestion"
                     data-card="viva"
+                    data-mode="viva"
                     type="button"
                     data-prompt="Start a rapid BDS viva session. Ask me one question at a time and wait for my answer."
                 >
@@ -4363,6 +4446,7 @@ body {
                 <button
                     class="suggestion"
                     data-card="osce"
+                    data-mode="osce"
                     type="button"
                     data-prompt="Start an OSCE station for a final-year BDS student. Give me the station instructions and ask me what I would do."
                 >
@@ -4378,6 +4462,15 @@ body {
                         </div>
                     </div>
                 </button>
+
+                <button class="suggestion" data-card="pdf" data-mode="pdf" type="button">
+                    <div class="suggestion-icon" aria-hidden="true">▱</div>
+                    <div class="suggestion-copy">
+                        <div class="suggestion-title">PDF Tutor</div>
+                        <div class="suggestion-text">Study and ask questions from your PDFs.</div>
+                    </div>
+                </button>
+
 
             </div>
 
@@ -8104,6 +8197,8 @@ function setMode(mode) {
         mode = "study";
     }
 
+    closeMobileMenu();
+
     currentMode =
         mode;
 
@@ -9335,8 +9430,13 @@ document
             "click",
             function() {
 
+                if (button.dataset.mode) setMode(button.dataset.mode);
+
                 const prompt =
                     button.dataset.prompt;
+
+                // Test Mode and PDF Tutor open their existing workspaces directly.
+                if (!prompt) return;
 
                 messageInput.value =
                     prompt;
@@ -9425,42 +9525,38 @@ document
    MOBILE MENU
 ========================================================= */
 
+const mobileLayout = window.matchMedia("(max-width: 760px)");
+const sidebarClose = document.getElementById("sidebarClose");
+const mainWorkspace = document.querySelector(".main");
+
 function openMobileMenu() {
-
-    sidebar.classList.add(
-        "open"
-    );
-
-    overlay.classList.add(
-        "show"
-    );
-
+    if (!mobileLayout.matches) return;
+    sidebar.inert = false;
+    sidebar.classList.add("open");
+    overlay.classList.add("show");
+    mobileMenu.setAttribute("aria-expanded", "true");
+    mainWorkspace.inert = true;
+    sidebarClose.focus();
 }
-
 
 function closeMobileMenu() {
-
-    sidebar.classList.remove(
-        "open"
-    );
-
-    overlay.classList.remove(
-        "show"
-    );
-
+    const wasOpen = sidebar.classList.contains("open");
+    sidebar.classList.remove("open");
+    overlay.classList.remove("show");
+    mobileMenu.setAttribute("aria-expanded", "false");
+    mainWorkspace.inert = false;
+    sidebar.inert = mobileLayout.matches;
+    if (wasOpen && mobileLayout.matches) mobileMenu.focus();
 }
 
-
-mobileMenu.addEventListener(
-    "click",
-    openMobileMenu
-);
-
-
-overlay.addEventListener(
-    "click",
-    closeMobileMenu
-);
+mobileMenu.addEventListener("click", openMobileMenu);
+sidebarClose.addEventListener("click", closeMobileMenu);
+overlay.addEventListener("click", closeMobileMenu);
+document.addEventListener("keydown", event => {
+    if (event.key === "Escape" && sidebar.classList.contains("open")) closeMobileMenu();
+});
+mobileLayout.addEventListener("change", closeMobileMenu);
+closeMobileMenu();
 
 
 /* =========================================================
