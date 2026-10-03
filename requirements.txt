@@ -11,5 +11,6 @@ Pillow
 packaging
 ollama
 python-multipart
+cryptography
 pytesseract
 pinecone>=9,<10
