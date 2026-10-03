@@ -83,6 +83,7 @@ jobs:
           node --check docs/offline.js
           node --check docs/sw.js
           node tests/test_offline_browser.js
+          node tests/test_modes_browser.js
 
       - name: Check Windows RAG wizard syntax
         shell: pwsh

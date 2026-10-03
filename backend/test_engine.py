@@ -2,6 +2,8 @@ import hashlib
 import json
 import os
 import random
+import math
+import re
 from collections import Counter
 from typing import Any, Dict, List, Optional
 
@@ -22,7 +24,24 @@ def _clean(value: Any, limit: int = 500) -> str:
 
 def _json(value: Any, limit: int = 12000) -> str:
     raw = json.dumps(value, ensure_ascii=False, separators=(",", ":"))
-    return raw[:limit]
+    if len(raw) > limit:
+        raise ValueError("Question metadata exceeds the storage limit.")
+    return raw
+
+
+def numeric_metadata(value, *, integer=False):
+    """OCR/AI metadata can be unknown, unit-bearing, or a page range."""
+    if isinstance(value, bool):
+        return 0
+    text = str(value or "").strip()
+    pattern = r"(\d+(?:\.\d+)?)" + (r"(?:\s*[-–—]\s*\d+)?(?:\s*pages?)?" if integer else r"(?:\s*marks?)?")
+    match = re.fullmatch(pattern, text, re.I)
+    if not match:
+        return 0
+    result = float(match.group(1))
+    if not math.isfinite(result) or result > (100000 if integer else 10000):
+        return 0
+    return int(result) if integer else result
 
 
 def _loads(value: Any, fallback: Any):
@@ -108,11 +127,10 @@ class PastPaperStore:
     ) -> Dict[str, Any]:
         index = self._index()
 
-        if replace_existing:
-            self._delete_prefix(TEST_NS, f"ppq#{paper_id}#")
-
         clean_questions = []
         for position, raw in enumerate(questions, start=1):
+            if not isinstance(raw, dict):
+                continue
             stem = _clean(raw.get("stem"), 4000)
             if not stem:
                 continue
@@ -127,7 +145,7 @@ class PastPaperStore:
                 options = {
                     str(key).strip().upper()[:4]: _clean(value, 1200)
                     for key, value in options.items()
-                    if _clean(value, 1200)
+                    if re.fullmatch(r"[A-H]", str(key).strip().upper()) and _clean(value, 1200)
                 }
             else:
                 options = {}
@@ -159,9 +177,10 @@ class PastPaperStore:
                 "question_type": _clean(raw.get("question_type") or ("mcq" if options else "short_answer"), 40).lower(),
                 "topic": _clean(raw.get("topic") or "Unclassified", 160),
                 "subtopic": _clean(raw.get("subtopic") or "", 180),
-                "page": int(raw.get("page") or 0),
-                "marks": float(raw.get("marks") or 0),
-                "provided_answer": _clean(raw.get("provided_answer"), 40).upper(),
+                "page": numeric_metadata(raw.get("page"), integer=True),
+                "marks": numeric_metadata(raw.get("marks")),
+                "provided_answer": (_clean(raw.get("provided_answer"), 40).upper()
+                                    if _clean(raw.get("provided_answer"), 40).upper() in options else ""),
                 "provisional_answer": suggested_answer,
                 "provisional_confidence": _clean(
                     raw.get("suggested_confidence"),
@@ -234,6 +253,13 @@ class PastPaperStore:
                 namespace=TEST_NS,
             )
 
+        # Validate and save the replacement before removing obsolete records.
+        # A malformed input must never erase a previously usable paper.
+        if replace_existing:
+            obsolete = set(self._list_ids(TEST_NS, f"ppq#{paper_id}#")) - {r["id"] for r in records}
+            for start in range(0, len(obsolete), 1000):
+                index.delete(ids=list(obsolete)[start:start + 1000], namespace=TEST_NS)
+
         manifest_vector = storage_vector
         question_count = len(records)
         if not replace_existing:
@@ -288,7 +314,7 @@ class PastPaperStore:
         vector_id: str,
         metadata: Dict[str, Any],
     ) -> Dict[str, Any]:
-        return {
+        item = {
             "id": vector_id,
             "paper_id": metadata.get("paper_id", ""),
             "paper_title": metadata.get("paper_title", ""),
@@ -302,8 +328,8 @@ class PastPaperStore:
             "question_type": metadata.get("question_type", ""),
             "topic": metadata.get("topic", "Unclassified"),
             "subtopic": metadata.get("subtopic", ""),
-            "page": int(metadata.get("page", 0) or 0),
-            "marks": float(metadata.get("marks", 0) or 0),
+            "page": numeric_metadata(metadata.get("page"), integer=True),
+            "marks": numeric_metadata(metadata.get("marks")),
             "provided_answer": metadata.get("provided_answer", ""),
             "provisional_answer": metadata.get("provisional_answer", ""),
             "provisional_confidence": metadata.get(
@@ -323,6 +349,13 @@ class PastPaperStore:
             ),
             "stem_hash": metadata.get("stem_hash", ""),
         }
+        if not isinstance(item["options"], dict):
+            item["options"] = {}
+        item["options"] = {str(k).strip().upper(): str(v) for k, v in item["options"].items() if v}
+        for field in ("provided_answer", "provisional_answer", "verified_answer"):
+            key = str(item[field] or "").strip().upper()
+            item[field] = key if key in item["options"] else ""
+        return item
 
     @cached_read(ttl=60)
     def list_questions(
@@ -696,11 +729,12 @@ class PastPaperStore:
         weak_topics: Optional[List[str]] = None,
         repeated_only: bool = False,
     ) -> List[Dict[str, Any]]:
-        questions = self.list_questions(
-            subject=subject,
-            year=year,
-            topic=topic,
-        )
+        # Reuse the catalog's cached bank; changing a filter must not download
+        # every record again or build several copies of the same cache entry.
+        bank = self.list_questions()
+        questions = [q for q in bank if (not subject or q["subject"].lower() == subject.lower())
+                     and (not year or str(q["year"]) == str(year))
+                     and (not topic or q["topic"].lower() == topic.lower())]
 
         questions = [
             item
@@ -717,7 +751,7 @@ class PastPaperStore:
 
         repeat_counts = Counter(
             item["stem_hash"]
-            for item in self.list_questions()
+            for item in bank
             if item.get("stem_hash")
         )
 
@@ -790,6 +824,7 @@ class PastPaperStore:
     def grade(
         self,
         responses: List[Dict[str, str]],
+        questions=None,
     ) -> Dict[str, Any]:
         by_id = {
             str(item.get("question_id", "")): str(
@@ -799,12 +834,15 @@ class PastPaperStore:
             if item.get("question_id")
         }
 
-        questions = self.fetch_questions(list(by_id.keys()))
-        repeat_counts = Counter(
-            item["stem_hash"]
-            for item in self.list_questions()
-            if item.get("stem_hash")
-        )
+        snapshot = questions is not None
+        questions = questions if snapshot else self.fetch_questions(list(by_id.keys()))
+        if set(by_id) - {q["id"] for q in questions}:
+            raise ValueError("Some questions are unavailable. Your test answers have been preserved; retry after reconnecting.")
+        if any(not any(q.get(key) in (q.get("options") or {}) for key in
+                       ("verified_answer", "provided_answer", "provisional_answer")) for q in questions):
+            raise ValueError("This test contains an unresolved answer key and cannot be scored reliably.")
+        repeat_counts = Counter(item["stem_hash"] for item in self.list_questions()
+                                if item.get("stem_hash")) if not snapshot else {}
 
         details = []
         correct = 0
@@ -874,7 +912,7 @@ class PastPaperStore:
                 "year": item["year"],
                 "repeat_count": repeat_counts.get(
                     item["stem_hash"],
-                    1,
+                    item.get("repeat_count", 1),
                 ),
                 "verification_status": item["verification_status"],
                 "verification_confidence": item["verification_confidence"],
