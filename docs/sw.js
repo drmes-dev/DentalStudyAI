@@ -1,6 +1,6 @@
-const CACHE = 'dentora-shell-v4';
+const CACHE = 'dentora-shell-v5';
 const ROOT = new URL('./', self.location.href);
-const SHELL = ['./', './index.html', './offline.js?v=2', './manifest.webmanifest', './icon.svg',
+const SHELL = ['./', './index.html', './offline.js?v=3', './manifest.webmanifest', './icon.svg',
     './about.html', './privacy.html', './terms.html'].map(path => new URL(path, ROOT).href);
 self.addEventListener('install', event => {
     event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(SHELL.map(url => new Request(url, {cache: 'reload'}))))

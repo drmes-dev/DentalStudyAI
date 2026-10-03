@@ -1,5 +1,6 @@
 from fastapi import FastAPI, UploadFile, File, Form, Header, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field
 from io import BytesIO
 from pypdf import PdfReader
@@ -121,7 +122,7 @@ class ChatTurn(BaseModel):
 class ChatRequest(BaseModel):
     message: str = Field(max_length=12000)
     mode: str = "study"
-    session_id: str = "default"
+    session_id: str = Field(default="default", max_length=120)
     use_library: bool = True
     categories: Optional[List[str]] = None
     history: List[ChatTurn] = Field(default_factory=list, max_length=12)
@@ -131,6 +132,8 @@ class ChatRequest(BaseModel):
 
 mcq_tokens = MCQTokens(DENTORA_OWNER_ACCESS_CODE or DENTORA_ADMIN_KEY
                        or os.urandom(32).hex())
+test_tokens = MCQTokens("test-session:" + (DENTORA_OWNER_ACCESS_CODE or DENTORA_ADMIN_KEY
+                                         or os.urandom(32).hex()))
 
 
 class RagSearchRequest(BaseModel):
@@ -154,10 +157,13 @@ class TestStartRequest(BaseModel):
     topic: Optional[str] = Field(default=None, max_length=160)
     repeated_only: bool = False
     weak_topics: Optional[List[str]] = None
+    session_id: str = Field(default="default", max_length=160)
 
 
 class TestGradeRequest(BaseModel):
-    responses: List[Dict[str, str]] = Field(default_factory=list)
+    responses: List[Dict[str, str]] = Field(default_factory=list, max_length=100)
+    session_id: str = Field(default="default", max_length=160)
+    test_token: str = Field(default="", max_length=2000000)
 
 
 class ImportRagPastPaperRequest(BaseModel):
@@ -255,7 +261,7 @@ def purge_expired_session_pdfs():
     now = time.time()
     expired = [
         session_id
-        for session_id, item in session_pdfs.items()
+        for session_id, item in list(session_pdfs.items())
         if now - float(item.get("uploaded_at", 0) or 0)
         > SESSION_PDF_TTL_SECONDS
     ]
@@ -482,8 +488,13 @@ def generate_with_fallback(prompt: str, timeout_seconds: Optional[int] = None, j
             ("Groq", "qwen/qwen3.8-27b"),
             ("Qwen API", "qwen-plus"),
         ]
-    timeout = timeout_seconds or 45
+    budget = timeout_seconds or 45
+    deadline = time.monotonic() + budget
     for provider, model in models:
+        remaining = deadline - time.monotonic()
+        if remaining < 1:
+            break
+        timeout = min(remaining, 25)
         if model_availability.remaining(provider, model):
             continue
         try:
@@ -522,10 +533,10 @@ def generate_with_fallback(prompt: str, timeout_seconds: Optional[int] = None, j
     # Local Qwen is a true last-resort fallback whenever the backend is running
     # on a machine with Ollama enabled. Do not disable it merely because a
     # caller supplied a timeout (past-paper import always supplies one).
-    if os.getenv("DENTORA_LOCAL_AI", "").lower() == "true":
+    if os.getenv("DENTORA_LOCAL_AI", "").lower() == "true" and deadline - time.monotonic() >= 1:
         try:
             local_model = os.getenv("DENTORA_LOCAL_MODEL", "qwen3:8b").strip() or "qwen3:8b"
-            response = ollama.chat(
+            response = ollama.Client(timeout=max(1, deadline - time.monotonic())).chat(
                 model=local_model,
                 messages=[{"role": "user", "content": prompt}],
             )
@@ -1560,7 +1571,7 @@ OCR is too damaged or the item is genuinely ambiguous, return an empty answer.
 def root():
     return {
         "message": "Dentora backend is running.",
-        "version": "2.7.0-grounded-chat",
+        "version": "2.8.0-mode-stability",
     }
 
 
@@ -1571,6 +1582,7 @@ def health():
         "service": "Dentora API",
         "chat_context_version": 1,
         "verified_mcq_state": True,
+        "test_session_version": 1,
         "rag_configured": rag_store.configured,
         "voice_configured": bool(os.getenv("GROQ_API_KEY")),
         "test_engine_configured": past_paper_store.configured,
@@ -1635,6 +1647,8 @@ async def upload_pdf(
             status_code=400,
             detail="Only PDF files are supported.",
         )
+    if not session_id.strip() or session_id.strip() == "default" or len(session_id.strip()) > 120:
+        raise HTTPException(status_code=400, detail="A unique browser session is required for PDF Tutor. Reload Dentora and retry.")
 
     try:
         max_bytes = MAX_TEMP_PDF_MB * 1024 * 1024
@@ -1650,7 +1664,7 @@ async def upload_pdf(
             )
 
         try:
-            page_count = len(PdfReader(BytesIO(contents)).pages)
+            page_count = await run_in_threadpool(lambda: len(PdfReader(BytesIO(contents)).pages))
         except Exception as exc:
             raise HTTPException(
                 status_code=400,
@@ -1666,7 +1680,7 @@ async def upload_pdf(
                 ),
             )
 
-        extraction = extract_pdf_pages(contents, allow_ocr=True, web_mode=True)
+        extraction = await run_in_threadpool(extract_pdf_pages, contents, allow_ocr=True, web_mode=True)
         chunks = chunk_pages(extraction["pages"])
 
         if not chunks:
@@ -1772,7 +1786,7 @@ async def rag_ingest_pdf(
             detail="Only PDF files are supported.",
         )
 
-    contents = await file.read()
+    contents = await file.read(MAX_WEB_INGEST_MB * 1024 * 1024 + 1)
 
     if len(contents) > MAX_WEB_INGEST_MB * 1024 * 1024:
         raise HTTPException(
@@ -1783,7 +1797,7 @@ async def rag_ingest_pdf(
             ),
         )
 
-    extraction = extract_pdf_pages(contents, allow_ocr=True, web_mode=True)
+    extraction = await run_in_threadpool(extract_pdf_pages, contents, allow_ocr=True, web_mode=True)
     unresolved = extraction["unresolved_scanned_pages"]
 
     if (
@@ -1809,7 +1823,7 @@ async def rag_ingest_pdf(
     resolved_title = title.strip() or os.path.splitext(filename)[0]
 
     try:
-        result = rag_store.index_pages(
+        result = await run_in_threadpool(rag_store.index_pages,
             doc_id=document_id(contents),
             filename=filename,
             title=resolved_title,
@@ -1975,7 +1989,7 @@ async def transcribe_voice(
         )
 
     try:
-        transcription = groq_client.audio.transcriptions.create(
+        transcription = await run_in_threadpool(groq_client.with_options(timeout=45, max_retries=0).audio.transcriptions.create,
             file=(filename, contents, content_type),
             model="whisper-large-v3-turbo",
             response_format="json",
@@ -2070,7 +2084,7 @@ async def ingest_past_paper(
         )
 
     try:
-        extraction = extract_pdf_pages(
+        extraction = await run_in_threadpool(extract_pdf_pages,
             contents,
             allow_ocr=True,
             web_mode=True,
@@ -2104,12 +2118,12 @@ async def ingest_past_paper(
         )
 
     try:
-        questions = parse_past_paper_questions(
+        questions = await run_in_threadpool(parse_past_paper_questions,
             pages=extraction["pages"],
             subject=resolved_subject,
         )
 
-        questions = canonicalize_past_paper_topics(
+        questions = await run_in_threadpool(canonicalize_past_paper_topics,
             questions,
             resolved_subject,
         )
@@ -2125,7 +2139,7 @@ async def ingest_past_paper(
 
         paper_id = document_id(contents)
 
-        result = past_paper_store.index_paper(
+        result = await run_in_threadpool(past_paper_store.index_paper,
             paper_id=paper_id,
             title=resolved_title,
             subject=resolved_subject,
@@ -3177,10 +3191,21 @@ def start_test(
         repeated_only=config.repeated_only,
     )
 
+    if not questions:
+        raise HTTPException(status_code=404, detail="No questions with usable keys match these filters. Try All subjects or refresh the question bank.")
+    frozen = {q["id"]: q for q in past_paper_store.fetch_questions([q["id"] for q in questions])}
+    if any(q["id"] not in frozen for q in questions):
+        raise HTTPException(status_code=503, detail="The question bank is updating. Please retry starting your test.")
+    snapshots = [{**frozen[q["id"]], "repeat_count": q.get("repeat_count", 1)} for q in questions]
+    # Return the exact wording/options whose keys were frozen, even if an
+    # import replaced a record between selection and the snapshot fetch.
+    questions = [{key: snapshot.get(key, public.get(key)) for key in public}
+                 for public, snapshot in zip(questions, snapshots)]
     return {
         "count": len(questions),
         "questions": questions,
         "answers_hidden": True,
+        "test_token": test_tokens.seal(snapshots, config.session_id, "test"),
     }
 
 
@@ -3214,9 +3239,15 @@ def grade_test(
         10 * 60,
     )
 
-    return past_paper_store.grade(
-        payload.responses
-    )
+    snapshots = None
+    if payload.test_token:
+        snapshots = test_tokens.open(payload.test_token, payload.session_id, "test")
+        if not isinstance(snapshots, list):
+            raise HTTPException(status_code=409, detail="This saved test has expired or belongs to another session. Start a new test.")
+    try:
+        return past_paper_store.grade(payload.responses, questions=snapshots)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from None
 
 
 # =========================================================
@@ -3328,11 +3359,14 @@ Do not rewrite or renumber any options. When uncertain, verified must be false.
         verdict = _json_payload(review.get("response", ""), "object")
         if verdict.get("verified") is not True or verdict.get("correct_answer") != candidate["correct_answer"]:
             raise ValueError("Independent MCQ review failed")
-    except (ValueError, TypeError, KeyError, AttributeError):
+    except (ValueError, TypeError, KeyError, AttributeError) as exc:
+        print("Chat MCQ validation withheld:", type(exc).__name__)
         return {"provider": "Dentora", "response": "I couldn't verify a single reliable answer from the retrieved textbook evidence, so I haven't added this MCQ. Please try a more specific topic.",
                 "mcq_token": request.mcq_token, "sources": [], "grounding_verified": False}
+    supported_labels = {item["label"] for item in candidate["support"]}
     state = {"question": candidate, "instruction": instruction,
-             "seen": (seen + [candidate["stem"]])[-8:], "sources": public_sources(sources)}
+             "seen": (seen + [candidate["stem"]])[-8:], "sources": [source for source in public_sources(sources)
+                                                                     if source["label"] in supported_labels]}
     return {"provider": draft["provider"], "model": draft.get("model", ""),
             "response": render_question(candidate), "grounding_verified": True,
             "verification_provider": review.get("provider", ""), "rag_used": True,
@@ -3391,7 +3425,9 @@ def chat(
                 "sources": state["sources"], "mcq_token": request.mcq_token,
                 "rag_used": True, "grounding_verified": True}
 
-    create_mcq = mcq_mode and question_request(message)
+    topic_only = (not request.history and not state and len(message.split()) <= 8
+                  and not re.search(r"[?]|\b(?:why|how|what|explain|define|compare|thanks|hello|hi)\b", message, re.I))
+    create_mcq = mcq_mode and (question_request(message) or topic_only)
     instruction = state["instruction"] if state and next_question(message) else message
     if mcq_mode and next_question(message) and not state:
         instruction = next((turn.content for turn in request.history
@@ -3406,6 +3442,10 @@ def chat(
 
     # Temporary PDF Tutor source
     session_pdf = session_pdfs.get(request.session_id)
+    pdf_mode = mode_key in {"pdf", "pdf tutor"}
+    if pdf_mode and not session_pdf:
+        return {"provider": "Dentora", "response": "Your temporary PDF is not available in this session. Please upload it again to use PDF Tutor.",
+                "sources": [], "grounding_verified": False, "pdf_unavailable": True}
 
     if session_pdf:
         session_added = 0
@@ -3435,7 +3475,7 @@ def chat(
                 break
 
     # Persistent library
-    if request.use_library and rag_store.configured:
+    if request.use_library and rag_store.configured and not pdf_mode:
         try:
             library_sources = rag_store.search(
                 retrieval_query,
@@ -3580,6 +3620,13 @@ MODE-SPECIFIC INSTRUCTIONS
 - Viva Mode: prioritize short examiner-ready answers, then key follow-up points.
 - OSCE Mode: structure answers around station steps, identification, findings, interpretation, safety, and examiner prompts.
 - PDF Tutor: stay especially strict to uploaded/retrieved material.
+- Apply ONLY the current mode's format. If the user asks to practise viva,
+  ask ONE source-supported examiner question and wait; do not reveal its answer.
+  For their answer, give brief feedback using the question in recent context.
+  For an OSCE simulation, present ONE station with candidate instructions,
+  then wait; keep model answers and marking checklists hidden until requested.
+  A short follow-up such as "next" stays on the current subject and difficulty.
+  If no subject or prior station/question is available, ask for the topic.
 
 GENERAL PRESENTATION
 --------------------
@@ -3600,7 +3647,7 @@ Answer now.
         and generated.get("response")
     ):
         verified = verify_source_grounding(
-            question=f"{message}\nConversation context only, not evidence: {history_context(request.history)}",
+            question=f"Mode: {request.mode}. Preserve interactive question/station format and any hidden answer. {message}\nConversation context only, not evidence: {history_context(request.history)}",
             draft=generated["response"],
             knowledge_context=knowledge_context,
         )

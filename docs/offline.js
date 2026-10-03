@@ -24,7 +24,8 @@
     }
     function valid(value) {
         return value && value.schema_version === 1 && Array.isArray(value.questions)
-            && value.questions.every(q => q.id && q.stem && q.options && q.correct_answer in q.options);
+            && Array.isArray(value.papers) && value.questions.every(q => q && q.id && q.stem
+                && q.options && typeof q.options === 'object' && q.correct_answer in q.options);
     }
     const ready = storage('get').then(value => { if (valid(value)) pack = value; }).catch(() => {});
     if ('serviceWorker' in navigator) {
@@ -93,22 +94,42 @@
         return {total, answered, correct, unanswered: total - answered, incorrect: answered - correct,
             score_percent: total ? Math.round(correct / total * 1000) / 10 : 0, details, offline: true};
     }
+    async function timedFetch(url, options = {}, timeoutMs = 120000) {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), timeoutMs);
+        try {
+            const response = await fetch(url, {...options, signal: controller.signal});
+            // Keep the deadline active through body download, not just headers.
+            const body = await response.arrayBuffer();
+            return new Response([204, 205, 304].includes(response.status) ? null : body,
+                {status: response.status, statusText: response.statusText, headers: response.headers});
+        } catch (error) {
+            if (controller.signal.aborted || error.name === 'AbortError') {
+                throw new Error('The server took too long to respond. Retry when the service is ready.');
+            }
+            throw new Error('Unable to connect to Dentora. Check your connection and retry.');
+        } finally { clearTimeout(timer); }
+    }
+    async function responseError(response, fallback) {
+        const data = await response.json().catch(() => ({}));
+        if (typeof data.detail === 'string') return new Error(data.detail);
+        return new Error(response.status === 401 ? 'Your access code has expired. Unlock Dentora and retry.'
+            : response.status === 429 ? 'Too many requests. Please wait a moment before retrying.' : fallback);
+    }
     async function request(kind, url, options = {}, localOnly = false) {
         await ready;
+        const body = JSON.parse(options.body || '{}');
+        const onlineGrade = kind === 'grade' && !localOnly && (body.test_token || !localMode());
         if (!localOnly && !localMode()) {
             try {
-                const controller = new AbortController();
-                const timer = setTimeout(() => controller.abort(), 10000);
-                let response;
-                try { response = await fetch(url, {...options, signal: controller.signal}); }
-                finally { clearTimeout(timer); }
-                if (response.status < 500 && response.status !== 429 || !pack) {
+                const response = await timedFetch(url, options);
+                if (response.status < 500 && response.status !== 429 || !pack || onlineGrade) {
                     lastLocal = false; update(); return response;
                 }
-            } catch (error) { if (!pack) throw error; }
+            } catch (error) { if (!pack || onlineGrade) throw error; }
         }
+        if (onlineGrade) throw new Error('Reconnect to submit this online test. Your answers are saved; grading uses the original test key.');
         if (!pack) throw new Error('Connect once and save a question pack in Test Mode before using offline tests.');
-        const body = JSON.parse(options.body || '{}');
         if (kind === 'grade' && (body.responses || []).some(r => !pack.questions.some(q => q.id === r.question_id))) {
             throw new Error('Some questions in this test are not in your saved pack. Reconnect to grade this test; your selected answers are still here.');
         }
@@ -139,7 +160,7 @@
     async function save(url, options) {
         if (!navigator.onLine) throw new Error('Connect to the internet to download or update your question pack.');
         if (!('serviceWorker' in navigator)) throw new Error('This browser cannot save the offline app. Use a current Chrome, Edge, or Firefox browser.');
-        const response = await fetch(url, options);
+        const response = await timedFetch(url, options);
         if (!response.ok) { const data = await response.json().catch(() => ({})); throw new Error(data.detail || 'The pack could not be downloaded.'); }
         const value = await response.json();
         if (!valid(value) || !value.questions.length) throw new Error('There are no questions with usable answer keys for this subject yet.');
@@ -158,7 +179,8 @@
         localStorage.removeItem('dentora_use_saved_pack'); update();
     }
     function setLocal(value) { useSaved = Boolean(value); localStorage.setItem('dentora_use_saved_pack', String(useSaved)); update(); }
-    window.DentoraOffline = {ready, request, save, remove, setLocal, update, isLocal: localMode, hasPack: () => Boolean(pack)};
+    window.DentoraOffline = {ready, request, save, remove, setLocal, update, fetch: timedFetch, responseError,
+        isLocal: localMode, hasPack: () => Boolean(pack)};
     window.addEventListener('online', update);
     window.addEventListener('offline', update);
     ready.then(update);

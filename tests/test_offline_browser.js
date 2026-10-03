@@ -50,9 +50,30 @@ async function main() {
     navigator.onLine=true;
     assert.equal((await app.request('catalog','https://api/test/catalog')).status,401); // Do not hide an auth failure with cached data.
     assert.equal(requests,1);
+    // An online test must never silently switch to the saved pack's different key.
+    sandbox.fetch = async () => {throw new Error('network down');};
+    await assert.rejects(app.request('grade','https://api/test/grade', {body:JSON.stringify({
+        test_token:'frozen-online-key',responses:[{question_id:'one',answer:'A'}]})}), /connect/);
+    assert.equal((await (await app.request('catalog','https://api/test/catalog')).json()).offline,true);
     await app.remove();
     navigator.onLine=false;
     await assert.rejects(app.request('catalog','https://api/test/catalog'),/save a question pack/);
+    navigator.onLine=true;
+    let timeoutCallback, timeoutMs;
+    let bodyStarted;
+    const downloadingBody = new Promise(resolve => bodyStarted=resolve);
+    sandbox.setTimeout = (fn, ms) => {timeoutCallback=fn; timeoutMs=ms; return 1;};
+    sandbox.clearTimeout = () => {};
+    sandbox.fetch = async (_url, options) => ({status:200, headers:{},
+        arrayBuffer: () => new Promise((_resolve,reject) => {
+            options.signal.addEventListener('abort', () => reject(Object.assign(new Error('signal is aborted without reason'), {name:'AbortError'})));
+            bodyStarted();
+        })});
+    const slowBody = app.fetch('https://api/test/catalog');
+    await downloadingBody;
+    assert.equal(timeoutMs,120000);
+    timeoutCallback();
+    await assert.rejects(slowBody, /server took too long/); // Deadline includes body download.
 
     const handlers = {}, cached = new Map(), unrelated = 'another-app-cache';
     const cache = {addAll:async paths=>paths.forEach(request=>cached.set(request.url,new Response(request.url))),
@@ -70,6 +91,6 @@ async function main() {
     let intercepted=false;
     handlers.fetch({request:{method:'GET',url:'https://api.example.org/test/offline-pack'},respondWith:()=>intercepted=true});
     assert.equal(intercepted,false);
-    console.log('Offline filtering, answer hiding, grading, provenance, missing-question guard, auth handling, storage removal, and shell fallback passed.');
+    console.log('Offline filtering, answer hiding, grading, provenance, online-key isolation, timeout recovery, auth handling, storage removal, and shell fallback passed.');
 }
 main().catch(error=>{console.error(error);process.exitCode=1;});
