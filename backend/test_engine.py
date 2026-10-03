@@ -139,13 +139,13 @@ class PastPaperStore:
             if isinstance(options, list):
                 options = {
                     chr(65 + idx): _clean(value, 1200)
-                    for idx, value in enumerate(options[:8])
+                    for idx, value in enumerate(options[:26]) if _clean(value, 1200)
                 }
             elif isinstance(options, dict):
                 options = {
                     str(key).strip().upper()[:4]: _clean(value, 1200)
                     for key, value in options.items()
-                    if re.fullmatch(r"[A-H]", str(key).strip().upper()) and _clean(value, 1200)
+                    if re.fullmatch(r"[A-Z]|[1-9]\d?", str(key).strip().upper()) and _clean(value, 1200)
                 }
             else:
                 options = {}

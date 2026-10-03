@@ -72,5 +72,5 @@ class ModelAvailability:
             "retry_after": retry_after,
             "response": ("Cloud AI quota is temporarily exhausted or providers are busy. " if quota else
                          "Cloud AI providers are temporarily unavailable. ") +
-                        "Dentora will retry from the saved page; already saved questions are safe.",
+                        "Please retry shortly. Your saved progress is safe.",
         }
