@@ -86,6 +86,24 @@ def validate_question(candidate, sources):
     if not isinstance(explanation, str) or not 20 <= len(explanation) <= 2500:
         raise ValueError("Missing explanation")
     support = candidate.get("support")
+    validate_support(support, sources, explanation)
+    return {"stem": stem.strip(), "options": options, "correct_answer": key,
+            "explanation": explanation.strip(), "support": support}
+
+
+def render_question(question):
+    options = "\n\n".join(f"**{key}.** {value}" for key, value in question["options"].items())
+    return f"**Question**\n\n{question['stem']}\n\n{options}\n\nChoose one option (A–{list(question['options'])[-1]})."
+
+
+def render_grade(question, label):
+    key = question["correct_answer"]
+    outcome = "Correct." if label == key else f"You chose {label}. The correct answer is {key}."
+    return (f"**{outcome}**\n\n**{key}. {question['options'][key]}**\n\n"
+            f"{question['explanation']}\n\nSay **next question** to continue on the same subject.")
+
+
+def validate_support(support, sources, explanation):
     if not isinstance(support, list) or not support:
         raise ValueError("Missing textbook support")
     for item in support:
@@ -102,17 +120,3 @@ def validate_question(candidate, sources):
     supported = {item["label"] for item in support}
     if any(label not in supported for label in re.findall(r"\[(S\d+)\]", explanation)):
         raise ValueError("Unsupported explanation citation")
-    return {"stem": stem.strip(), "options": options, "correct_answer": key,
-            "explanation": explanation.strip(), "support": support}
-
-
-def render_question(question):
-    options = "\n\n".join(f"**{key}.** {value}" for key, value in question["options"].items())
-    return f"**Question**\n\n{question['stem']}\n\n{options}\n\nChoose one option (A–{list(question['options'])[-1]})."
-
-
-def render_grade(question, label):
-    key = question["correct_answer"]
-    outcome = "Correct." if label == key else f"You chose {label}. The correct answer is {key}."
-    return (f"**{outcome}**\n\n**{key}. {question['options'][key]}**\n\n"
-            f"{question['explanation']}\n\nSay **next question** to continue on the same subject.")

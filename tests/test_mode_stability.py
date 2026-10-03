@@ -66,6 +66,18 @@ class ModeStabilityTests(unittest.TestCase):
         self.assertEqual(metadata['provided_answer'], '')
         self.assertEqual(metadata['provisional_answer'], 'B')
 
+    def test_extended_matching_options_i_and_j_are_preserved(self):
+        store = PastPaperStore()
+        index = Mock()
+        store._index = lambda: index
+        for options in ({chr(65+i): f'Option {i}' for i in range(10)}, [f'Option {i}' for i in range(10)]):
+            store.index_paper(paper_id='paper', title='Exam', subject='Ortho', year='2025', filename='exam.pdf',
+                             replace_existing=False, questions=[{'stem':'An extended matching question',
+                             'options':options,'provided_answer':'I'}])
+            metadata = index.upsert.call_args_list[-2].kwargs['vectors'][0]['metadata']
+            self.assertIn('J', __import__('json').loads(metadata['options_json']))
+            self.assertEqual(metadata['provided_answer'], 'I')
+
     def test_serialization_never_silently_truncates_json(self):
         with self.assertRaises(ValueError):
             _json({'A': 'x' * 13000})

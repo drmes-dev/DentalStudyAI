@@ -103,6 +103,31 @@ async function main() {
     assert.equal(sandbox.activeTest.test_token, 'frozen');
     assert.equal(sandbox.testSession.classList.contains('show'), true);
     assert.equal(requestCount, 2);
+    // Switching to local questions while an online catalog loads must win.
+    let local = false, resolveCatalog, catalogs = 0;
+    sandbox.testCatalogLoading = false;
+    sandbox.testCatalogReloadRequested = false;
+    sandbox.ownerAccessCode = '';
+    sandbox.ragPastPaperSyncStatus = null;
+    sandbox.dentoraAccessCode = 'fixture';
+    sandbox.TEST_CATALOG_API = '/test/catalog';
+    sandbox.renderOwnerPaperPanel = () => {};
+    sandbox.populateTestFilters = () => {};
+    sandbox.DentoraOffline = {ready: Promise.resolve(), isLocal: () => local,
+        request: () => ++catalogs === 1 ? new Promise(resolve => resolveCatalog=resolve)
+            : Promise.resolve(new Response(JSON.stringify({offline:true, mcq_count:27})))};
+    for (const name of ['bankPaperCount','bankQuestionCount','bankEligibleCount','bankRepeatedCount']) sandbox[name] = element();
+    vm.runInContext(functionSource('loadTestCatalog'), context);
+    const catalogLoad = sandbox.loadTestCatalog(false);
+    await Promise.resolve();
+    local = true;
+    await sandbox.loadTestCatalog(false);
+    resolveCatalog(new Response(JSON.stringify({mcq_count:1500})));
+    await catalogLoad;
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(catalogs, 2);
+    assert.equal(sandbox.testCatalog.offline, true);
+    assert.equal(sandbox.bankQuestionCount.textContent, '27');
     console.log('All six mode transitions, late reply isolation, reload recovery, expiry failure, manual retry and duplicate grading passed.');
 }
 main().catch(error => {console.error(error); process.exitCode = 1;});

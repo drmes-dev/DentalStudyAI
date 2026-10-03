@@ -5133,6 +5133,7 @@ let activeTestTimer = null;
 let testSubmitting = false;
 let testStarting = false;
 let testCatalogLoading = false;
+let testCatalogReloadRequested = false;
 let currentChatMode = 'study';
 let legacyPastPaperImportRunning = false;
 let lastPastPaperSyncMessage = "";
@@ -6438,8 +6439,9 @@ async function repairExistingQuestionBank(
 async function loadTestCatalog(
     allowLegacyImport = true
 ) {
-    if (testCatalogLoading) return;
+    if (testCatalogLoading) { testCatalogReloadRequested = true; return; }
     testCatalogLoading = true;
+    const requestedLocal = DentoraOffline.isLocal();
     try {
     await DentoraOffline.ready;
     renderOwnerPaperPanel();
@@ -6492,8 +6494,9 @@ async function loadTestCatalog(
             );
         }
 
-        testCatalog =
-            await response.json();
+        const catalog = await response.json();
+        if (requestedLocal !== DentoraOffline.isLocal()) { testCatalogReloadRequested = true; return; }
+        testCatalog = catalog;
 
         bankPaperCount.textContent =
             String(
@@ -6590,7 +6593,10 @@ async function loadTestCatalog(
             "error"
         );
     }
-    } finally { testCatalogLoading = false; }
+    } finally {
+        testCatalogLoading = false;
+        if (testCatalogReloadRequested) { testCatalogReloadRequested = false; loadTestCatalog(false); }
+    }
 }
 
 
@@ -9301,6 +9307,9 @@ async function sendMessage() {
                             mcq_token:
                                 [...currentMessages].reverse().find(item =>
                                     item.role === "assistant")?.mcq_token || "",
+                            practice_token:
+                                [...currentMessages].reverse().find(item =>
+                                    item.role === "assistant")?.practice_token || "",
 
                             use_library:
                                 true
@@ -9398,6 +9407,7 @@ async function sendMessage() {
         );
 
         if (currentMessages.length) currentMessages[currentMessages.length - 1].mcq_token = data.mcq_token || '';
+        if (currentMessages.length) currentMessages[currentMessages.length - 1].practice_token = data.practice_token || '';
 
 
         if (shouldSpeakReply) {

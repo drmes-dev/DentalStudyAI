@@ -38,6 +38,7 @@ from offline_pack import build_offline_pack
 from conversation import (MCQTokens, answer_label, contextual_query, history_context,
                           next_question, question_request, render_grade,
                           render_question, validate_question)
+from practice import generate_practice, grade_practice
 
 
 # =========================================================
@@ -128,12 +129,15 @@ class ChatRequest(BaseModel):
     history: List[ChatTurn] = Field(default_factory=list, max_length=12)
     chat_id: str = Field(default="default", max_length=160)
     mcq_token: str = Field(default="", max_length=40000)
+    practice_token: str = Field(default="", max_length=120000)
 
 
 mcq_tokens = MCQTokens(DENTORA_OWNER_ACCESS_CODE or DENTORA_ADMIN_KEY
                        or os.urandom(32).hex())
 test_tokens = MCQTokens("test-session:" + (DENTORA_OWNER_ACCESS_CODE or DENTORA_ADMIN_KEY
                                          or os.urandom(32).hex()))
+practice_tokens = MCQTokens("interactive-practice:" + (DENTORA_OWNER_ACCESS_CODE or DENTORA_ADMIN_KEY
+                                                      or os.urandom(32).hex()))
 
 
 class RagSearchRequest(BaseModel):
@@ -1571,7 +1575,7 @@ OCR is too damaged or the item is genuinely ambiguous, return an empty answer.
 def root():
     return {
         "message": "Dentora backend is running.",
-        "version": "2.8.0-mode-stability",
+        "version": "2.8.1-interactive-practice",
     }
 
 
@@ -1583,6 +1587,7 @@ def health():
         "chat_context_version": 1,
         "verified_mcq_state": True,
         "test_session_version": 1,
+        "interactive_practice_version": 1,
         "rag_configured": rag_store.configured,
         "voice_configured": bool(os.getenv("GROQ_API_KEY")),
         "test_engine_configured": past_paper_store.configured,
@@ -3403,6 +3408,22 @@ def chat(
     if not message:
         raise HTTPException(status_code=400, detail="Message cannot be empty.")
 
+    interactive_mode = mode_key in {"viva", "osce"}
+    practice_state = practice_tokens.open(request.practice_token, request.session_id, request.chat_id) if interactive_mode else None
+    if practice_state and practice_state.get("mode") != mode_key:
+        practice_state = None
+    begin_practice = bool(re.search(r"^\s*(?:start|practi[sc]e|simulate|run|begin)\b", message, re.I))
+    bare_topic = (not request.history and len(message.split()) <= 8 and
+                  not re.search(r"[?]|\b(?:why|how|what|explain|define|compare|thanks|hello|hi)\b", message, re.I))
+    create_practice = interactive_mode and (begin_practice or question_request(message) or bare_topic and not practice_state)
+    if interactive_mode and request.practice_token and not practice_state and not create_practice:
+        return {"provider": "Dentora", "response": "This practice item has no valid saved reference answer in this chat. Please start a new question or station.", "sources": []}
+    if practice_state and not create_practice:
+        if re.fullmatch(r"\s*(?:why|explain(?: (?:it|the answer|why))?|show (?:the )?answer)[.!?]*\s*", message, re.I):
+            return {"provider": "Dentora", "response": practice_state["expected_answer"], "sources": practice_state["sources"],
+                    "practice_token": request.practice_token, "grounding_verified": True, "rag_used": True}
+        return grade_practice(request, practice_state, generate_with_fallback)
+
     state = mcq_tokens.open(request.mcq_token, request.session_id, request.chat_id) if mcq_mode else None
     label = answer_label(message) if mcq_mode else None
     if state and not label:
@@ -3429,13 +3450,17 @@ def chat(
                   and not re.search(r"[?]|\b(?:why|how|what|explain|define|compare|thanks|hello|hi)\b", message, re.I))
     create_mcq = mcq_mode and (question_request(message) or topic_only)
     instruction = state["instruction"] if state and next_question(message) else message
+    if create_practice and practice_state and next_question(message):
+        instruction = practice_state["instruction"]
+    elif interactive_mode and next_question(message) and not practice_state:
+        return {"provider": "Dentora", "response": "Which topic would you like to practise? Start a new question or station on that topic.", "sources": []}
     if mcq_mode and next_question(message) and not state:
         instruction = next((turn.content for turn in request.history
                             if turn.role == "user" and question_request(turn.content)
                             and not next_question(turn.content)), "")
         if not instruction:
             return {"provider": "Dentora", "response": "Which subject or topic would you like the next MCQ on?", "sources": []}
-    retrieval_query = instruction if create_mcq else contextual_query(message, request.history)
+    retrieval_query = instruction if create_mcq or create_practice else contextual_query(message, request.history)
 
     retrieved_sources: List[Dict[str, Any]] = []
     rag_warning = ""
@@ -3515,6 +3540,8 @@ def chat(
 
     if create_mcq:
         return generate_chat_mcq(request, retrieved_sources, instruction, state)
+    if create_practice:
+        return generate_practice(request, retrieved_sources, instruction, practice_state, generate_with_fallback, practice_tokens)
     if strict_source and not rag_used:
         return {"provider": "Dentora", "response": "I couldn't retrieve evidence from your requested source, so I can't verify a source-based answer yet. Please specify the chapter/topic or try again when the library is available.", "sources": [], "grounding_verified": False, "rag_used": False}
 
