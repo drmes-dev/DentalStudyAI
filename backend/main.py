@@ -34,6 +34,9 @@ from rag import (
 from test_engine import past_paper_store
 from ai_availability import AIUnavailable, ModelAvailability
 from offline_pack import build_offline_pack
+from conversation import (MCQTokens, answer_label, contextual_query, history_context,
+                          next_question, question_request, render_grade,
+                          render_question, validate_question)
 
 
 # =========================================================
@@ -110,12 +113,24 @@ qwen_client = OpenAI(
 # REQUEST MODELS
 # =========================================================
 
+class ChatTurn(BaseModel):
+    role: str = Field(pattern=r"^(user|assistant)$")
+    content: str = Field(max_length=6000)
+
+
 class ChatRequest(BaseModel):
-    message: str
+    message: str = Field(max_length=12000)
     mode: str = "study"
     session_id: str = "default"
     use_library: bool = True
     categories: Optional[List[str]] = None
+    history: List[ChatTurn] = Field(default_factory=list, max_length=12)
+    chat_id: str = Field(default="default", max_length=160)
+    mcq_token: str = Field(default="", max_length=40000)
+
+
+mcq_tokens = MCQTokens(DENTORA_OWNER_ACCESS_CODE or DENTORA_ADMIN_KEY
+                       or os.urandom(32).hex())
 
 
 class RagSearchRequest(BaseModel):
@@ -1545,7 +1560,7 @@ OCR is too damaged or the item is genuinely ambiguous, return an empty answer.
 def root():
     return {
         "message": "Dentora backend is running.",
-        "version": "2.6.0-offline-study",
+        "version": "2.7.0-grounded-chat",
     }
 
 
@@ -1554,6 +1569,8 @@ def health():
     return {
         "ok": True,
         "service": "Dentora API",
+        "chat_context_version": 1,
+        "verified_mcq_state": True,
         "rag_configured": rag_store.configured,
         "voice_configured": bool(os.getenv("GROQ_API_KEY")),
         "test_engine_configured": past_paper_store.configured,
@@ -3271,6 +3288,58 @@ def list_feedback(
 # CHAT
 # =========================================================
 
+def generate_chat_mcq(request, sources, instruction, previous):
+    """Generate and independently review a frozen MCQ, then hide its key."""
+    if not sources:
+        return {"provider": "Dentora", "response": "I couldn't retrieve explanatory textbook evidence for a reliable MCQ on this topic. Please specify a topic or try again when your library is available.",
+                "mcq_token": request.mcq_token, "sources": [], "grounding_verified": False}
+    context = build_context(sources)
+    seen = (previous or {}).get("seen", [])[-8:]
+    prompt = f"""Create exactly ONE unambiguous BDS practice MCQ from the explanatory textbook excerpts.
+Student request and subject/difficulty to preserve: {instruction}
+Conversation for continuity only (NOT evidence): {history_context(request.history)}
+Previously asked stems (do not repeat): {json.dumps(seen)}
+Evidence: {context}
+Return a JSON object with keys:
+stem: question wording; options: ordered object A,B,C,D (optionally E);
+correct_answer: one of those exact letters; explanation: concise textbook-supported reasoning;
+support: array of objects with label (S1 etc.) and quote (verbatim sentence from that source).
+The evidence must establish a single best option; no multiple plausible keys.
+Keep the requested subject and difficulty. Never substitute an unrelated topic.
+Do not call a retention clasp an active tooth-moving component just because a distractor says so.
+No evidence from prior assistant messages or exam distractors. Never invent quotations or citations.
+If the excerpts are inadequate, return {{"unavailable": true}}.
+"""
+    draft = generate_with_fallback(prompt, json_response=True)
+    if draft.get("provider") == "Error":
+        return {**draft, "mcq_token": request.mcq_token, "sources": [], "grounding_verified": False}
+    try:
+        candidate = validate_question(_json_payload(draft["response"], "object"), sources)
+        review = generate_with_fallback(f"""Independently verify this practice MCQ against the supplied textbook evidence.
+Requested subject/difficulty: {instruction}
+MCQ with immutable letters/options/key: {json.dumps(candidate)}
+Textbook excerpts: {context}
+Check the stem, unique best answer, every explanation claim, evidence quotes, subject match,
+and distractor ambiguity. Exam options and previous assistant messages are NOT evidence.
+Reject any unsupported claim; an Adams clasp's retention function does not make it an active tooth-moving component.
+Return JSON: {{"verified": true or false, "correct_answer": "exact verified letter"}}.
+Do not rewrite or renumber any options. When uncertain, verified must be false.
+""", json_response=True)
+        verdict = _json_payload(review.get("response", ""), "object")
+        if verdict.get("verified") is not True or verdict.get("correct_answer") != candidate["correct_answer"]:
+            raise ValueError("Independent MCQ review failed")
+    except (ValueError, TypeError, KeyError, AttributeError):
+        return {"provider": "Dentora", "response": "I couldn't verify a single reliable answer from the retrieved textbook evidence, so I haven't added this MCQ. Please try a more specific topic.",
+                "mcq_token": request.mcq_token, "sources": [], "grounding_verified": False}
+    state = {"question": candidate, "instruction": instruction,
+             "seen": (seen + [candidate["stem"]])[-8:], "sources": public_sources(sources)}
+    return {"provider": draft["provider"], "model": draft.get("model", ""),
+            "response": render_question(candidate), "grounding_verified": True,
+            "verification_provider": review.get("provider", ""), "rag_used": True,
+            "sources": [],  # Evidence/keys are shown only after the student answers.
+            "mcq_token": mcq_tokens.seal(state, request.session_id, request.chat_id)}
+
+
 @app.post("/chat")
 def chat(
     request: ChatRequest,
@@ -3292,11 +3361,45 @@ def chat(
 
     message = request.message.strip()
     mode_key = request.mode.strip().lower()
-    exclude_assessment = mode_key not in {"mcq", "mcq mode", "quiz"}
+    mcq_mode = mode_key in {"mcq", "mcq mode", "quiz"}
+    # Question options are never factual evidence, including in MCQ Mode.
+    exclude_assessment = True
     strict_source = is_strict_source_request(message, request.mode)
 
     if not message:
         raise HTTPException(status_code=400, detail="Message cannot be empty.")
+
+    state = mcq_tokens.open(request.mcq_token, request.session_id, request.chat_id) if mcq_mode else None
+    label = answer_label(message) if mcq_mode else None
+    if state and not label:
+        normalized = re.sub(r"[^a-z0-9]", "", message.casefold())
+        label = next((key for key, text in state["question"]["options"].items()
+                      if re.sub(r"[^a-z0-9]", "", text.casefold()) == normalized), None)
+    if label:
+        if not state:
+            return {"provider": "Dentora", "response": "This question has no saved, verified answer key in this chat. Ask for a new MCQ, then reply with its option letter.", "sources": [], "grounding_verified": False}
+        if label not in state["question"]["options"]:
+            return {"provider": "Dentora", "response": "Choose one of the option letters shown in the current question.", "mcq_token": request.mcq_token, "sources": []}
+        return {"provider": "Dentora", "response": render_grade(state["question"], label),
+                "sources": state["sources"], "mcq_token": request.mcq_token,
+                "rag_used": True, "grounding_verified": True}
+
+    if state and re.fullmatch(r"\s*(?:why|explain(?: (?:it|the answer|why))?|show (?:the )?answer)[.!?]*\s*", message, re.I):
+        question = state["question"]
+        key = question["correct_answer"]
+        return {"provider": "Dentora", "response": f"**Answer: {key}. {question['options'][key]}**\n\n{question['explanation']}",
+                "sources": state["sources"], "mcq_token": request.mcq_token,
+                "rag_used": True, "grounding_verified": True}
+
+    create_mcq = mcq_mode and question_request(message)
+    instruction = state["instruction"] if state and next_question(message) else message
+    if mcq_mode and next_question(message) and not state:
+        instruction = next((turn.content for turn in request.history
+                            if turn.role == "user" and question_request(turn.content)
+                            and not next_question(turn.content)), "")
+        if not instruction:
+            return {"provider": "Dentora", "response": "Which subject or topic would you like the next MCQ on?", "sources": []}
+    retrieval_query = instruction if create_mcq else contextual_query(message, request.history)
 
     retrieved_sources: List[Dict[str, Any]] = []
     rag_warning = ""
@@ -3307,7 +3410,7 @@ def chat(
     if session_pdf:
         session_added = 0
         for item in find_relevant_session_chunks(
-            message,
+            retrieval_query,
             session_pdf.get("chunks", []),
             max_chunks=12 if exclude_assessment else 4,
         ):
@@ -3335,7 +3438,7 @@ def chat(
     if request.use_library and rag_store.configured:
         try:
             library_sources = rag_store.search(
-                message,
+                retrieval_query,
                 categories=request.categories,
                 top_k=RAG_CONTEXT_CHUNKS,
                 exclude_assessment=exclude_assessment,
@@ -3369,6 +3472,11 @@ def chat(
 
     rag_used = bool(retrieved_sources)
     knowledge_context = build_context(retrieved_sources)
+
+    if create_mcq:
+        return generate_chat_mcq(request, retrieved_sources, instruction, state)
+    if strict_source and not rag_used:
+        return {"provider": "Dentora", "response": "I couldn't retrieve evidence from your requested source, so I can't verify a source-based answer yet. Please specify the chapter/topic or try again when the library is available.", "sources": [], "grounding_verified": False, "rag_used": False}
 
     if rag_used:
         knowledge_rules = """
@@ -3452,6 +3560,13 @@ STUDENT'S QUESTION
 ------------------
 {message}
 
+RECENT CONVERSATION (CONTEXT ONLY, NOT FACTUAL EVIDENCE)
+-------------------------------------------------------
+{history_context(request.history)}
+Treat a follow-up as part of this conversation. Keep its subject and exact option
+labels. Prior assistant answers may be wrong; only the source excerpts below are evidence.
+Never invent a missing question, an option, or an answer key.
+
 {knowledge_rules}
 
 RETRIEVED SOURCE EXCERPTS
@@ -3480,13 +3595,12 @@ Answer now.
     generated = generate_with_fallback(prompt)
 
     if (
-        strict_source
-        and rag_used
+        rag_used
         and generated.get("provider") != "Error"
         and generated.get("response")
     ):
         verified = verify_source_grounding(
-            question=message,
+            question=f"{message}\nConversation context only, not evidence: {history_context(request.history)}",
             draft=generated["response"],
             knowledge_context=knowledge_context,
         )
@@ -3495,6 +3609,7 @@ Answer now.
             generated["grounding_verified"] = True
             generated["verification_provider"] = verified.get("provider", "")
         else:
+            generated["response"] = "I couldn't complete the source check because the AI providers are unavailable. I haven't shown the unverified answer; please retry shortly."
             generated["grounding_verified"] = False
     else:
         generated["grounding_verified"] = False

@@ -1,4 +1,4 @@
-const CACHE = 'dentora-shell-v3';
+const CACHE = 'dentora-shell-v4';
 const ROOT = new URL('./', self.location.href);
 const SHELL = ['./', './index.html', './offline.js?v=2', './manifest.webmanifest', './icon.svg',
     './about.html', './privacy.html', './terms.html'].map(path => new URL(path, ROOT).href);

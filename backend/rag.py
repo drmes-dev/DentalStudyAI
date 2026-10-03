@@ -186,6 +186,15 @@ def is_assessment_like(text: str) -> bool:
 
     return score >= 4
 
+
+def is_assessment_source(metadata: Dict[str, Any], text: str) -> bool:
+    """Past-paper provenance remains assessment data even if OCR drops labels."""
+    category = str(metadata.get("category", "")).strip().casefold()
+    filename = str(metadata.get("filename", "")).casefold()
+    return (category in {"past papers", "past paper", "question bank", "question banks"}
+            or bool(re.search(r"past[\s_-]*papers?", filename))
+            or is_assessment_like(text))
+
 def is_strict_source_request(message: str, mode: str = "") -> bool:
     """Return True when the student explicitly wants a source-bound answer."""
     text = re.sub(r"\s+", " ", str(message or "").lower()).strip()
@@ -568,7 +577,7 @@ class RagStore:
             semantic = _score(match)
             lexical = keyword_overlap(query, text, metadata.get("title", ""))
             combined = 0.86 * semantic + 0.14 * lexical
-            assessment_like = is_assessment_like(text)
+            assessment_like = is_assessment_source(metadata, text)
 
             candidates.append({
                 "score": semantic,

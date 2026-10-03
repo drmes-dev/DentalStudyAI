@@ -9197,6 +9197,19 @@ async function sendMessage() {
                             session_id:
                                 dentoraSessionId,
 
+                            chat_id:
+                                currentChatId,
+
+                            history:
+                                currentMessages.slice(0, -1).slice(-12).map(item => ({
+                                    role: item.role,
+                                    content: String(item.content || "").slice(0, 6000)
+                                })),
+
+                            mcq_token:
+                                [...currentMessages].reverse().find(item =>
+                                    item.role === "assistant" && item.mcq_token)?.mcq_token || "",
+
                             use_library:
                                 true
 
@@ -9294,6 +9307,10 @@ async function sendMessage() {
             true,
             message
         );
+
+        if (data.mcq_token && currentMessages.length) {
+            currentMessages[currentMessages.length - 1].mcq_token = data.mcq_token;
+        }
 
 
         if (shouldSpeakReply) {
