@@ -66,6 +66,8 @@ VOICE_RATE_LIMIT = int(os.getenv("VOICE_RATE_LIMIT", "20"))
 VOICE_RATE_WINDOW_SECONDS = int(os.getenv("VOICE_RATE_WINDOW_SECONDS", "3600"))
 
 _default_origins = (
+    "https://dentora.live,"
+    "https://www.dentora.live,"
     "https://drmes-dev.github.io,"
     "http://localhost:5500,"
     "http://127.0.0.1:5500,"
