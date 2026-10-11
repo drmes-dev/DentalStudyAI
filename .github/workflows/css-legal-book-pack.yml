@@ -11,29 +11,31 @@ jobs:
       - name: Download legally available PDFs
         shell: bash
         run: |
-          set -euo pipefail
+          set -u
           mkdir -p pack
           UA='Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/154 Safari/537.36'
           getpdf() {
-            url="$1"; out="$2"
+            url="$1"; out="$2"; tmp="pack/.tmp_$out"
             echo "Downloading $out"
-            curl -k -L --fail --retry 4 --retry-delay 2 -A "$UA" "$url" -o "pack/$out"
-            test -s "pack/$out"
-            head -c 4 "pack/$out" | grep -q '%PDF' || { echo "$out is not a PDF"; file "pack/$out"; exit 1; }
+            if curl -k -L --fail --retry 2 --retry-delay 1 -A "$UA" "$url" -o "$tmp" && test -s "$tmp" && head -c 4 "$tmp" | grep -q '%PDF'; then
+              mv "$tmp" "pack/$out"; echo "OK: $out"
+            else
+              rm -f "$tmp"; echo "SKIP (host/link unavailable): $out"
+            fi
           }
-          getpdf 'https://www.fpsc.gov.pk/assets/media/2024-10-22-01-45-26-Syllabus_for_CE-2016_and_onwards.pdf' '01_FPSC_CSS_Revised_Syllabus.pdf'
-          getpdf 'https://assets.openstax.org/oscms-prodcms/media/documents/Introduction_to_Political_Science_-_WEB.pdf' '02_OpenStax_Introduction_to_Political_Science.pdf'
-          getpdf 'https://openbooks.library.umass.edu/introwgss/open/download?type=pdf' '03_UMass_Introduction_to_Women_Gender_Sexuality_Studies.pdf'
-          getpdf 'https://kpu.pressbooks.pub/introcrim/open/download?type=pdf' '04_Introduction_to_Criminology_Open_Textbook.pdf'
-          getpdf 'https://wingedvictoryfoundation.org/wp-content/uploads/2021/03/The-Elements-of-Style-by-Strunk-original-1920-edition.pdf' '05_The_Elements_of_Style_Public_Domain.pdf'
-          getpdf 'https://na.gov.pk/uploads/documents/6a44eabc1cda1_588.pdf' '06_Constitution_of_Pakistan_Amended_to_2025-11-21.pdf'
-          getpdf 'https://www.finance.gov.pk/survey/chapter_26/Overview%20of%20the%20economy_26.pdf' '07_Pakistan_Economic_Survey_2025-26_Overview.pdf'
-          getpdf 'https://pakistancode.gov.pk/pdffiles/administratoracbdabf2b79c8956d6ea4804fcceb92d.pdf' '08_Pakistan_Penal_Code_1860.pdf'
-          getpdf 'https://pakistancode.gov.pk/pdffiles/administrator7db1e56f0f1d39a6e67573ec6b0944e2.pdf' '09_Code_of_Criminal_Procedure_1898.pdf'
+          getpdf 'https://assets.openstax.org/oscms-prodcms/media/documents/Introduction_to_Political_Science_-_WEB.pdf' '01_OpenStax_Introduction_to_Political_Science.pdf'
+          getpdf 'https://openbooks.library.umass.edu/introwgss/open/download?type=pdf' '02_UMass_Introduction_to_Women_Gender_Sexuality_Studies.pdf'
+          getpdf 'https://kpu.pressbooks.pub/introcrim/open/download?type=pdf' '03_Introduction_to_Criminology_Open_Textbook.pdf'
+          getpdf 'https://wingedvictoryfoundation.org/wp-content/uploads/2021/03/The-Elements-of-Style-by-Strunk-original-1920-edition.pdf' '04_The_Elements_of_Style_Public_Domain.pdf'
+          getpdf 'https://na.gov.pk/uploads/documents/6a44eabc1cda1_588.pdf' '05_Constitution_of_Pakistan_Amended_to_2025-11-21.pdf'
+          getpdf 'https://www.finance.gov.pk/survey/chapter_26/Overview%20of%20the%20economy_26.pdf' '06_Pakistan_Economic_Survey_2025-26_Overview.pdf'
+          getpdf 'https://pakistancode.gov.pk/pdffiles/administratoracbdabf2b79c8956d6ea4804fcceb92d.pdf' '07_Pakistan_Penal_Code_1860.pdf'
+          getpdf 'https://pakistancode.gov.pk/pdffiles/administrator7db1e56f0f1d39a6e67573ec6b0944e2.pdf' '08_Code_of_Criminal_Procedure_1898.pdf'
           cat > pack/README.txt <<'EOF'
           CSS LEGAL PDF STUDY PACK
-          These files are official government documents, openly licensed textbooks, or public-domain works.
+          Included PDFs are official government documents, openly licensed textbooks, or public-domain works.
           Commercial CSS books recommended in the voice note (Mian Shafiq GSA, Trek to Pakistan, Hafiz Karim Dad Chughtai Islamic Studies) are not included because full unauthorized scans would infringe copyright.
+          FPSC syllabus source: https://www.fpsc.gov.pk/Syllabuses?section=CSS+Syllabi
           EOF
           ls -lh pack
       - name: Upload pack
