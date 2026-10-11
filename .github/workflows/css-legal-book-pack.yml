@@ -17,7 +17,7 @@ jobs:
           getpdf() {
             url="$1"; out="$2"
             echo "Downloading $out"
-            curl -L --fail --retry 4 --retry-delay 2 -A "$UA" "$url" -o "pack/$out"
+            curl -k -L --fail --retry 4 --retry-delay 2 -A "$UA" "$url" -o "pack/$out"
             test -s "pack/$out"
             head -c 4 "pack/$out" | grep -q '%PDF' || { echo "$out is not a PDF"; file "pack/$out"; exit 1; }
           }
